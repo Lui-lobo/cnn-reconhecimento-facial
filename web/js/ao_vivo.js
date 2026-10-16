@@ -102,7 +102,7 @@ function pararWebcam() {
   video.srcObject = null;
   ctx.clearRect(0, 0, tela.width, tela.height);
   document.getElementById("video-vazio").hidden = false;
-  document.getElementById("leitura").innerHTML = "";
+  document.getElementById("leitura-ao-vivo").innerHTML = "";
   botaoLigar.disabled = false;
   botaoParar.disabled = true;
   botaoVerRede.disabled = true;
@@ -166,7 +166,7 @@ function desenharCaixas(resposta) {
     ctx.fillText(texto, x + 8, caixa.y + tamanhoFonte * 1.15);                        // nome + confiança
     leitura.push(`Caixa ${i + 1}: ${texto}`);
   });
-  document.getElementById("leitura").textContent = leitura.join(" · ");
+  document.getElementById("leitura-ao-vivo").textContent = leitura.join(" · ");
   mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro da caixa.");
 }
 

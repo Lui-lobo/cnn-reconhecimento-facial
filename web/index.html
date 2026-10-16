@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Reconhecimento facial com CNN</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/estilo.css">
 </head>
 <body>
@@ -44,7 +45,7 @@
       </fieldset>
 
       <label class="campo" for="limiar">
-        Limiar de confiança: <strong><output id="limiar-valor">60%</output></strong>
+        <span>Limiar de confiança: <strong><output id="limiar-valor">60%</output></strong></span>
         <input type="range" id="limiar" min="30" max="95" step="5" value="60">
         <small>Abaixo dele, a caixa mostra “desconhecido”.</small>
       </label>
@@ -54,7 +55,7 @@
       <button id="ver-rede" class="botao" disabled>Ver o que a rede vê</button>
 
       <p id="status" class="status">Clique em “Ligar webcam” para começar.</p>
-      <div id="leitura" class="leitura"></div>
+      <div id="leitura-ao-vivo" class="leitura"></div>
     </div>
   </div>
 
@@ -91,9 +92,464 @@
     </div>
   </details>
 </section>
+
+<!-- ============================ PARTE 2: DOCUMENTAÇÃO ============================ -->
+<!-- Os blocos <pre data-codigo="modulo/funcao"> são preenchidos com o código REAL de src/ (rota /api/codigo).
+     Os elementos com data-resultado e as tabelas dinâmicas vêm de /api/resultados (gerado pelo treino). -->
+<section id="documentacao" class="docs">
+  <div class="largura docs-grade">
+
+    <nav class="indice" aria-label="Índice da documentação">
+      <p class="indice-titulo">Documentação</p>
+      <ol>
+        <li><a href="#visao-geral">Visão geral</a></li>
+        <li><a href="#coleta-fotos">Coleta das fotos</a></li>
+        <li><a href="#leitura">Leitura</a></li>
+        <li><a href="#preprocessamento">Pré-processamento</a></li>
+        <li><a href="#divisao">Divisão dos dados</a></li>
+        <li><a href="#aumento">Aumento de dados</a></li>
+        <li><a href="#arquitetura">Arquitetura da CNN</a></li>
+        <li><a href="#treinamento">Treinamento</a></li>
+        <li><a href="#avaliacao">Avaliação</a></li>
+        <li><a href="#imagens-rede">Imagens intermediárias</a></li>
+        <li><a href="#ao-vivo">Reconhecimento ao vivo</a></li>
+        <li><a href="#perguntas">Perguntas prováveis</a></li>
+      </ol>
+      <p class="indice-topo"><a href="#app">↑ Voltar à aplicação</a></p>
+    </nav>
+
+    <div class="docs-conteudo">
+      <p id="aviso-resultados" class="status erro" hidden></p>
+
+      <!-- 1. Visão geral -->
+      <article id="visao-geral" class="secao">
+        <h2><span class="numero">1</span> Visão geral</h2>
+        <p>Treinamos <strong>do zero</strong> uma Rede Neural Convolucional (CNN) que recebe a foto de um rosto e diz
+          qual integrante do grupo ela é. Não usamos modelo pré-treinado, nem detector de rosto pronto: todo o
+          tratamento das imagens e as métricas foram programados por nós com NumPy.</p>
+        <div class="numeros" id="resumo-geral"></div>
+
+        <h3>O que é feito por nós e o que vem de biblioteca</h3>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Etapa</th><th>Ferramenta</th></tr></thead>
+          <tbody>
+            <tr><td>Abrir e salvar o arquivo .jpg/.png</td><td><code>PIL</code> (só transforma o arquivo em uma matriz de números)</td></tr>
+            <tr><td>Recorte, tons de cinza, redimensionamento, equalização, aumento de dados, divisão dos dados</td><td><strong>código próprio com NumPy</strong></td></tr>
+            <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
+            <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
+            <tr><td>Gráficos e imagens intermediárias</td><td><code>matplotlib</code></td></tr>
+            <tr><td>Servidor local e site</td><td><code>Flask</code> + HTML, CSS e JavaScript puros</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3>O caminho de uma foto</h3>
+        <ol class="fluxo">
+          <li>Foto da webcam<small>dataset/&lt;nome&gt;/</small></li>
+          <li>Pré-processamento<small>96×96, cinza, 0–1</small></li>
+          <li>Divisão<small>treino · validação · teste</small></li>
+          <li>Aumento<small>só no treino</small></li>
+          <li>CNN<small>4 convoluções</small></li>
+          <li>Treino<small>Adam + EarlyStopping</small></li>
+          <li>Avaliação<small>matriz e métricas</small></li>
+          <li>Ao vivo<small>webcam no site</small></li>
+        </ol>
+        <p>Tudo isso roda com um comando, <code>python -m src.treinar</code>, que salva o modelo em
+          <code>modelo/</code> e as imagens desta página em <code>web/img/resultados/</code>.
+          O servidor (<code>python app.py</code>) usa o modelo salvo para o reconhecimento ao vivo.</p>
+      </article>
+
+      <!-- 2. Coleta das fotos -->
+      <article id="coleta-fotos" class="secao">
+        <h2><span class="numero">2</span> Coleta das fotos</h2>
+        <p>Cada integrante tem a sua pasta, e <strong>o nome da pasta é o rótulo</strong> que a rede vai aprender:</p>
+        <pre class="bloco">dataset/
+├── ana/     ana_0000.jpg, ana_0001.jpg, ...
+├── bruno/   ...
+└── carla/   ...</pre>
+        <p>As fotos podem ser tiradas na própria página (seção “Coletar fotos” lá em cima) ou copiadas para a pasta.
+          No navegador, o JavaScript liga a webcam com <code>navigator.mediaDevices.getUserMedia</code>, faz uma contagem
+          de 3 segundos e tira uma foto a cada 250 ms. As fotos viajam como texto (JPEG em base64) até o servidor,
+          que as salva continuando a numeração.</p>
+        <p><strong>Dicas para a rede aprender o rosto, e não o fundo:</strong></p>
+        <ul>
+          <li>Façam 3 ou mais capturas por pessoa, em lugares e iluminações diferentes.</li>
+          <li>Mantenham o rosto centralizado e mexam levemente a cabeça durante a captura.</li>
+          <li>Usem quantidades parecidas de fotos por pessoa (algo entre 150 e 300).</li>
+        </ul>
+        <pre class="codigo" data-js="coleta.js#coletarFotos"></pre>
+        <pre class="codigo" data-codigo="dados/salvar_fotos"></pre>
+        <figure class="figura">
+          <img data-resultado="fotos_originais" alt="Seis fotos originais de cada integrante">
+          <figcaption>Fotos originais de cada integrante, sem nenhum tratamento.</figcaption>
+        </figure>
+      </article>
+
+      <!-- 3. Leitura -->
+      <article id="leitura" class="secao">
+        <h2><span class="numero">3</span> Leitura</h2>
+        <p>Percorremos as pastas e montamos duas listas: o caminho de cada foto e o número da pessoa (0, 1, 2...).
+          Pastas que começam com <code>.</code> ou <code>_</code> são ignoradas, e os arquivos são lidos em ordem
+          alfabética, que é a ordem em que as fotos foram tiradas (isso importa para a divisão dos dados).</p>
+        <p>Celulares às vezes salvam a foto “deitada” e anotam a rotação certa nos metadados (EXIF, código 274).
+          Nesse caso, desviramos a matriz com <code>np.rot90</code>.</p>
+        <pre class="codigo" data-codigo="dados/ler_imagem"></pre>
+        <pre class="codigo" data-codigo="dados/listar_dataset"></pre>
+      </article>
+
+      <!-- 4. Pré-processamento -->
+      <article id="preprocessamento" class="secao">
+        <h2><span class="numero">4</span> Pré-processamento</h2>
+        <p>Toda foto passa pelas mesmas 5 etapas, cada uma com uma função simples. A <strong>mesma</strong> função
+          <code>preprocessar</code> é usada no treino e no reconhecimento ao vivo: se fossem diferentes, a rede veria
+          ao vivo imagens diferentes das que aprendeu.</p>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Etapa</th><th>O que faz</th><th>Por quê</th></tr></thead>
+          <tbody>
+            <tr><td>1. Recorte central</td><td>corta o maior quadrado do centro da foto</td><td>a CNN exige entrada quadrada de tamanho fixo; cortar não deforma o rosto</td></tr>
+            <tr><td>2. Tons de cinza</td><td><code>0,299·R + 0,587·G + 0,114·B</code></td><td>1 canal em vez de 3; a identidade está na forma, não na cor</td></tr>
+            <tr><td>3. Redimensionamento</td><td>média de blocos + vizinho mais próximo até 96×96</td><td>menos pixels = treino rápido; a média evita serrilhado</td></tr>
+            <tr><td>4. Equalização de histograma</td><td>espalha os tons de cinza por toda a faixa 0–255 usando o histograma acumulado (CDF)</td><td>fotos claras e escuras ficam parecidas</td></tr>
+            <tr><td>5. Escala 0–1</td><td>divide por 255</td><td>redes neurais treinam melhor com números pequenos</td></tr>
+          </tbody>
+        </table></div>
+        <figure class="figura">
+          <img data-resultado="preprocessamento" alt="As etapas do pré-processamento e o histograma antes e depois da equalização">
+          <figcaption>As etapas para a primeira foto de cada integrante. À direita, o histograma dos tons antes e depois da equalização: depois dela, os tons ocupam toda a faixa.</figcaption>
+        </figure>
+        <h3>O código de cada etapa</h3>
+        <pre class="codigo" data-codigo="preprocessamento/recorte_central"></pre>
+        <pre class="codigo" data-codigo="preprocessamento/para_cinza"></pre>
+        <p>No redimensionamento, uma foto de 480×480 tem fator 5: cada bloco 5×5 vira um pixel (a média dele), e a
+          imagem resultante, de 96×96, passa pelo vizinho mais próximo (que aqui não muda nada, mas garante o tamanho
+          exato quando a conta não é inteira). O <code>reshape(n, fator, n, fator)</code> separa os blocos em eixos
+          próprios, e <code>mean(axis=(1, 3))</code> tira a média de cada um.</p>
+        <pre class="codigo" data-codigo="preprocessamento/redimensionar"></pre>
+        <p>Na equalização, <code>np.bincount</code> conta quantos pixels há de cada tom, <code>cumsum</code> acumula
+          essa contagem e a fórmula reescala o acumulado para 0–255. Depois, cada pixel troca seu tom pelo valor
+          acumulado do tom. Em uma imagem de uma cor só, o <code>max(..., 1)</code> evita a divisão por zero.</p>
+        <pre class="codigo" data-codigo="preprocessamento/equalizar_histograma"></pre>
+        <pre class="codigo" data-codigo="preprocessamento/preprocessar"></pre>
+      </article>
+
+      <!-- 5. Divisão dos dados -->
+      <article id="divisao" class="secao">
+        <h2><span class="numero">5</span> Divisão dos dados</h2>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Conjunto</th><th>Uso</th><th>Proporção</th></tr></thead>
+          <tbody>
+            <tr><td>Treino</td><td>a rede ajusta os pesos olhando essas fotos</td><td>~70%</td></tr>
+            <tr><td>Validação</td><td>acompanha o treino e decide quando parar</td><td>~15%</td></tr>
+            <tr><td>Teste</td><td>avaliação final, usado <strong>uma única vez</strong></td><td>~15%</td></tr>
+          </tbody>
+        </table></div>
+        <p class="destaque"><strong>Cuidado:</strong> fotos tiradas em sequência são quase idênticas. Se uma fosse para o
+          treino e a vizinha para o teste, a rede “já teria visto” a foto do teste e a nota ficaria falsamente alta.</p>
+        <p>Por isso agrupamos as fotos de cada pessoa em <strong>blocos de até 10 fotos seguidas</strong>
+          (tamanho <code>min(10, max(1, n // 7))</code>) e sorteamos blocos inteiros para cada conjunto, com a semente 42.
+          Fazemos isso por pessoa, para que todos apareçam nos três conjuntos. Se alguém tiver poucas fotos, os blocos
+          ficam menores, para garantir que sobrem blocos para o treino.</p>
+        <pre class="codigo" data-codigo="divisao/dividir_dados"></pre>
+        <h3>Quantas fotos ficaram em cada conjunto</h3>
+        <div class="tabela-rolagem dinamico" id="tabela-divisao"></div>
+      </article>
+
+      <!-- 6. Aumento de dados -->
+      <article id="aumento" class="secao">
+        <h2><span class="numero">6</span> Aumento de dados</h2>
+        <p>Com poucas fotos, a rede tende a <strong>decorar</strong> as imagens de treino (overfitting). Para evitar
+          isso, criamos 3 versões levemente modificadas de cada foto de treino, simulando situações reais:</p>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Transformação</th><th>Como</th><th>Simula</th></tr></thead>
+          <tbody>
+            <tr><td>Espelhamento horizontal</td><td>50% de chance, <code>img[:, ::-1]</code></td><td>rosto virado para o outro lado</td></tr>
+            <tr><td>Deslocamento</td><td>até 8 px, com borda repetida (<code>np.pad(mode="edge")</code>)</td><td>rosto fora do centro</td></tr>
+            <tr><td>Contraste</td><td>× U(0,8; 1,2) em torno de 0,5</td><td>iluminação diferente</td></tr>
+            <tr><td>Brilho</td><td>+ U(−0,1; 0,1)</td><td>ambiente mais claro ou escuro</td></tr>
+            <tr><td>Ruído</td><td>+ N(0; 0,02) em cada pixel</td><td>câmera de qualidade pior</td></tr>
+          </tbody>
+        </table></div>
+        <p>O aumento é aplicado <strong>apenas no treino</strong>. Validação e teste usam as fotos reais, porque precisam
+          medir o desempenho em situações verdadeiras.</p>
+        <pre class="codigo" data-codigo="aumento/aumentar"></pre>
+        <pre class="codigo" data-codigo="aumento/montar_treino_aumentado"></pre>
+        <figure class="figura">
+          <img data-resultado="aumento" alt="Uma foto de treino de cada integrante e seis versões aumentadas">
+          <figcaption>A mesma foto de treino modificada 6 vezes pelo aumento de dados.</figcaption>
+        </figure>
+      </article>
+
+      <!-- 7. Arquitetura da CNN -->
+      <article id="arquitetura" class="secao">
+        <h2><span class="numero">7</span> Arquitetura da CNN</h2>
+        <p>A cada bloco, a imagem fica menor (o pooling divide o tamanho por 2) e mais “profunda” (mais filtros).</p>
+        <div class="diagrama" role="img" aria-label="Fluxo da CNN: 96×96 para 48, 24, 12, 6, vetor de 4608 valores e probabilidades">
+          <div class="no"><div class="quadro" style="--lado: 112px">96×96×1</div><span>entrada</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="quadro" style="--lado: 84px">48×48×32</div><span>conv1 + pool1</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="quadro" style="--lado: 64px">24×24<br>×64</div><span>conv2 + pool2</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="quadro" style="--lado: 50px">12×12<br>×128</div><span>conv3 + pool3</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="quadro" style="--lado: 40px">6×6<br>×128</div><span>conv4 + pool4</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="vetor">4608</div><span>flatten + dropout</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="vetor curto">128</div><span>densa (ReLU)</span></div>
+          <div class="seta">→</div>
+          <div class="no"><div class="vetor saida">%</div><span>pontuações → softmax</span></div>
+        </div>
+        <ul>
+          <li><strong>Convolução 3×3:</strong> filtros 3×3 deslizam pela imagem e respondem a padrões. As primeiras camadas
+            detectam bordas; as últimas, partes do rosto. Os valores dos filtros são aprendidos no treino.
+            <code>padding="same"</code> mantém o tamanho da imagem.</li>
+          <li><strong>ReLU:</strong> <code>max(0, x)</code>. Zera os valores negativos e dá à rede a capacidade de
+            aprender relações não lineares.</li>
+          <li><strong>MaxPooling 2×2:</strong> fica com o maior valor de cada janela 2×2. Divide a resolução por 2 e
+            tolera pequenos deslocamentos.</li>
+          <li><strong>Flatten:</strong> transforma os mapas 6×6×128 em um vetor de 4608 números.</li>
+          <li><strong>Dropout 50%:</strong> desliga metade dos neurônios ao acaso durante o treino, para a rede não
+            depender de poucos neurônios.</li>
+          <li><strong>Dense + Softmax:</strong> a camada <code>pontuacoes</code> dá uma pontuação para cada integrante, e
+            o softmax transforma essas pontuações em probabilidades que somam 1.</li>
+        </ul>
+        <h3>Quantos parâmetros (pesos) cada camada tem</h3>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Camada</th><th>Fórmula</th><th>Parâmetros</th></tr></thead>
+          <tbody>
+            <tr><td>conv1</td><td>3·3·1·32 + 32</td><td>320</td></tr>
+            <tr><td>conv2</td><td>3·3·32·64 + 64</td><td>18.496</td></tr>
+            <tr><td>conv3</td><td>3·3·64·128 + 128</td><td>73.856</td></tr>
+            <tr><td>conv4</td><td>3·3·128·128 + 128</td><td>147.584</td></tr>
+            <tr><td>densa</td><td>4608·128 + 128</td><td>589.952</td></tr>
+            <tr><td>pontuacoes</td><td>128·N + N (N = integrantes)</td><td>129·N</td></tr>
+          </tbody>
+        </table></div>
+        <p>Regra geral da convolução: <code>altura_filtro · largura_filtro · canais_de_entrada · filtros + filtros</code>
+          (o último termo é o <em>bias</em>, um por filtro). Pooling, flatten, dropout e softmax não têm parâmetros.</p>
+        <h3>Camada a camada (modelo treinado)</h3>
+        <div class="tabela-rolagem dinamico" id="tabela-camadas"></div>
+        <pre class="codigo" data-codigo="modelo/construir_cnn"></pre>
+      </article>
+
+      <!-- 8. Treinamento -->
+      <article id="treinamento" class="secao">
+        <h2><span class="numero">8</span> Treinamento</h2>
+        <p>Em cada <strong>época</strong>, a rede passa por todas as fotos de treino em lotes (<em>batches</em>) de 32.
+          A cada lote:</p>
+        <ol>
+          <li>Faz a previsão.</li>
+          <li>Calcula o erro com a <strong>entropia cruzada</strong>: <code>erro = −log(probabilidade dada à pessoa certa)</code>.
+            Se a probabilidade certa foi 0,9, o erro é 0,1; se foi 0,1, o erro é 2,3.</li>
+          <li>Ajusta os pesos na direção que diminui o erro, por <strong>backpropagation</strong>, com o otimizador
+            <strong>Adam</strong> (taxa de aprendizado 0,001).</li>
+        </ol>
+        <p>São no máximo 60 épocas. O <strong>EarlyStopping</strong> observa o erro na validação: se ele não melhorar por
+          10 épocas seguidas, o treino para e a rede volta aos pesos da melhor época. A semente 42 (NumPy e TensorFlow)
+          faz o resultado se repetir.</p>
+        <pre class="codigo" data-codigo="treinar/treinar_rede"></pre>
+        <div class="numeros dinamico" id="info-treino"></div>
+        <figure class="figura">
+          <img data-resultado="curvas" alt="Curvas de erro e acurácia por época, no treino e na validação">
+          <figcaption><strong>Como ler:</strong> o ideal é treino e validação caírem juntos. Se o erro de treino continua
+            caindo enquanto o de validação sobe, a rede está decorando as fotos (overfitting).</figcaption>
+        </figure>
+        <p>O script <code>src/treinar.py</code> junta todas as etapas, na mesma ordem do notebook:</p>
+        <pre class="codigo recolhido" data-codigo="treinar/main"></pre>
+      </article>
+
+      <!-- 9. Avaliação -->
+      <article id="avaliacao" class="secao">
+        <h2><span class="numero">9</span> Avaliação: matriz de confusão e métricas</h2>
+        <p>A avaliação usa o conjunto de <strong>teste</strong>, que a rede nunca viu. Para cada foto, ficamos com o
+          integrante de maior probabilidade.</p>
+        <h3>Matriz de confusão</h3>
+        <p>As <strong>linhas</strong> são o integrante real e as <strong>colunas</strong> o integrante previsto. A diagonal
+          mostra os acertos; o resto mostra as confusões. Para cada integrante <em>X</em>:</p>
+        <ul>
+          <li><strong>VP</strong> (verdadeiro positivo): era X e a rede disse X. É a célula da diagonal.</li>
+          <li><strong>FP</strong> (falso positivo): a rede disse X, mas era outra pessoa. É o resto da <strong>coluna</strong> de X.</li>
+          <li><strong>FN</strong> (falso negativo): era X, mas a rede disse outra pessoa. É o resto da <strong>linha</strong> de X.</li>
+          <li><strong>VN</strong> (verdadeiro negativo): não era X e a rede não disse X. É todo o restante da matriz.</li>
+        </ul>
+        <div class="dinamico" id="matriz-html"></div>
+
+        <h3>Métricas</h3>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Métrica</th><th>Fórmula</th><th>Pergunta que responde</th></tr></thead>
+          <tbody>
+            <tr><td>Acurácia</td><td>acertos / total</td><td>Quantas fotos a rede acertou no total?</td></tr>
+            <tr><td>Precisão</td><td>VP / (VP + FP)</td><td>Quando a rede diz “é o X”, quantas vezes acerta?</td></tr>
+            <tr><td>Recall</td><td>VP / (VP + FN)</td><td>Das fotos do X, quantas a rede reconheceu?</td></tr>
+            <tr><td>F1-Score</td><td>2 · precisão · recall / (precisão + recall)</td><td>Equilíbrio entre precisão e recall</td></tr>
+            <tr><td>Especificidade</td><td>VN / (VN + FP)</td><td>Das fotos de outras pessoas, quantas não foram confundidas com o X?</td></tr>
+          </tbody>
+        </table></div>
+        <p>A <strong>média macro</strong> é a média simples entre os integrantes: dá o mesmo peso a todos, mesmo a quem
+          tem menos fotos.</p>
+        <div class="tabela-rolagem dinamico" id="tabela-metricas"></div>
+        <h3>Acurácia em cada conjunto</h3>
+        <p>Se a acurácia do treino for bem maior que a do teste, há overfitting.</p>
+        <div class="numeros dinamico" id="acuracias"></div>
+
+        <h3>O código das métricas</h3>
+        <pre class="codigo" data-codigo="metricas/matriz_confusao"></pre>
+        <pre class="codigo" data-codigo="metricas/calcular_metricas"></pre>
+        <figure class="figura">
+          <img data-resultado="matriz_confusao" alt="Matriz de confusão do conjunto de teste" class="estreita">
+          <figcaption>A matriz de confusão gerada pelo treino (quantidade e porcentagem da linha).</figcaption>
+        </figure>
+        <figure class="figura">
+          <img data-resultado="metricas" alt="Precisão, recall, F1 e especificidade de cada integrante">
+          <figcaption>Métricas por integrante no teste.</figcaption>
+        </figure>
+        <figure class="figura">
+          <img data-resultado="erros" alt="Fotos do teste que a rede errou">
+          <figcaption>Fotos do teste que a rede errou (no máximo 8), com o nome real e o previsto.</figcaption>
+        </figure>
+      </article>
+
+      <!-- 10. Imagens intermediárias da rede -->
+      <article id="imagens-rede" class="secao">
+        <h2><span class="numero">10</span> Imagens intermediárias da rede</h2>
+        <h3>Mapas de características</h3>
+        <p>Mostramos a saída de cada camada convolucional para uma foto de teste. Cada quadradinho é a resposta de
+          <strong>um filtro</strong>: as regiões claras são onde ele encontrou o padrão que procura. Em
+          <code>conv1</code> (96×96) ainda dá para ver o rosto, porque os filtros detectam bordas. Nas camadas seguintes,
+          a resolução cai e os mapas ficam mais abstratos.</p>
+        <p>Para ver essas saídas, montamos um “modelo espião”: a mesma rede, mas devolvendo a saída das camadas
+          intermediárias em vez da probabilidade final.</p>
+        <figure class="figura">
+          <img data-resultado="mapas" alt="Os 8 primeiros mapas de características das 4 camadas convolucionais">
+          <figcaption>Os 8 primeiros mapas de cada camada convolucional.</figcaption>
+        </figure>
+        <pre class="codigo" data-codigo="visualizacoes/mapas_caracteristicas"></pre>
+
+        <h3>Onde a rede “olhou” (Grad-CAM)</h3>
+        <ol>
+          <li>Calculamos o quanto a pontuação da pessoa prevista muda quando cada mapa da <code>conv4</code> muda: isso é o
+            <strong>gradiente</strong>. Usamos a pontuação de antes do softmax (camada <code>pontuacoes</code>) porque,
+            quando a rede tem quase 100% de certeza, a probabilidade quase não muda e o gradiente sai zerado.</li>
+          <li>A média do gradiente de cada mapa diz o quanto aquele mapa importa.</li>
+          <li>Somamos os mapas multiplicados pela sua importância e mantemos só os valores positivos (ReLU). O resultado,
+            de 12×12, é ampliado para 96×96 com a nossa função <code>redimensionar</code>.</li>
+        </ol>
+        <p>Se o calor estiver no <strong>rosto</strong>, a rede aprendeu o que queríamos. Se estiver no
+          <strong>fundo</strong>, ela está usando o cenário para decidir, e precisamos de fotos em mais lugares diferentes.</p>
+        <figure class="figura">
+          <img data-resultado="gradcam" alt="Grad-CAM de uma foto de teste de cada integrante">
+          <figcaption>Uma foto de teste de cada integrante (em cima) e o mapa de calor do Grad-CAM (embaixo).</figcaption>
+        </figure>
+        <pre class="codigo" data-codigo="reconhecimento/criar_modelo_gradcam"></pre>
+        <pre class="codigo" data-codigo="reconhecimento/grad_cam"></pre>
+      </article>
+
+      <!-- 11. Reconhecimento ao vivo -->
+      <article id="ao-vivo" class="secao">
+        <h2><span class="numero">11</span> Reconhecimento ao vivo</h2>
+        <p>A rede roda no servidor Python; o navegador cuida da câmera e do desenho. A cada ciclo (cerca de 4 por segundo):</p>
+        <ol class="ciclo">
+          <li><span class="lado navegador">Navegador</span> captura o quadro atual do vídeo e envia como JPEG para <code>POST /api/reconhecer</code>.</li>
+          <li><span class="lado servidor">Servidor</span> recorta as regiões fixas da tela com <code>regioes_da_tela</code>.</li>
+          <li><span class="lado servidor">Servidor</span> aplica o <strong>mesmo</strong> <code>preprocessar</code> do treino e passa as regiões pela CNN de uma vez.</li>
+          <li><span class="lado servidor">Servidor</span> devolve a posição de cada caixa e as probabilidades de cada integrante.</li>
+          <li><span class="lado navegador">Navegador</span> faz a média dos últimos 5 quadros, decide o nome com o limiar e desenha as caixas no <code>&lt;canvas&gt;</code>.</li>
+          <li><span class="lado navegador">Navegador</span> só envia o próximo quadro depois que a resposta chega (as requisições nunca se acumulam).</li>
+        </ol>
+
+        <h3>Por que as caixas são fixas</h3>
+        <p>O trabalho não permite usar um detector de rosto pronto, então a rede não sabe <em>onde</em> há rostos na
+          imagem. A solução simples é dividir a tela em regiões fixas: com 1 pessoa, a caixa é o maior quadrado do centro,
+          exatamente o mesmo recorte das fotos de treino (é quando a rede funciona melhor). Com 2 pessoas, a tela vira duas
+          faixas verticais, e cada pessoa se posiciona dentro de uma caixa; como cada caixa é menor, as pessoas devem ficar
+          um pouco mais perto da câmera.</p>
+        <pre class="codigo" data-codigo="reconhecimento/regioes_da_tela"></pre>
+        <pre class="codigo" data-codigo="reconhecimento/reconhecer_quadro"></pre>
+
+        <h3>Média dos últimos 5 quadros e o “desconhecido”</h3>
+        <p>De um quadro para o outro, as probabilidades oscilam um pouco. Para o nome não ficar “piscando”, o JavaScript
+          guarda as probabilidades dos últimos 5 quadros de cada caixa e usa a média. O softmax sempre escolhe alguém,
+          então, se a maior probabilidade média ficar abaixo do limiar (60% por padrão), a caixa fica vermelha com
+          “desconhecido”. O servidor não guarda estado: cada requisição é independente.</p>
+        <pre class="codigo" data-js="ao_vivo.js#mediaDosUltimos"></pre>
+
+        <h3>Vídeo espelhado</h3>
+        <p>O vídeo aparece espelhado (como um espelho, mais natural para quem está na frente da câmera), mas o quadro
+          enviado ao servidor <strong>não</strong> é espelhado, igual às fotos de treino. Por isso o canvas não é espelhado:
+          espelhamos só a posição x de cada caixa (<code>largura − x − lado</code>), e o texto continua legível.</p>
+        <pre class="codigo" data-js="ao_vivo.js#desenharCaixas"></pre>
+        <pre class="codigo recolhido" data-js="ao_vivo.js#loopReconhecimento"></pre>
+      </article>
+
+      <!-- 12. Perguntas prováveis -->
+      <article id="perguntas" class="secao">
+        <h2><span class="numero">12</span> Perguntas prováveis na apresentação</h2>
+        <h3>Dados e pré-processamento</h3>
+        <dl class="perguntas">
+          <dt>Por que recortar em vez de só redimensionar?</dt>
+          <dd>Redimensionar uma foto retangular para quadrado achataria o rosto.</dd>
+          <dt>Por que tons de cinza?</dt>
+          <dd>A identidade está na forma do rosto, não na cor. Com 1 canal a rede fica menor e depende menos da iluminação.</dd>
+          <dt>Por que a média de blocos antes de reduzir?</dt>
+          <dd>Pegar só 1 pixel a cada 5 (ou a cada 30, em fotos grandes) gera serrilhado. A média resume todos os pixels do bloco.</dd>
+          <dt>O que a equalização faz?</dt>
+          <dd>Usa o histograma acumulado para espalhar os tons de cinza de 0 a 255, deixando fotos claras e escuras parecidas.</dd>
+          <dt>Por que dividir em blocos de fotos seguidas?</dt>
+          <dd>Fotos seguidas são quase iguais. Separá-las ao acaso colocaria “gêmeas” no treino e no teste, inflando a nota.</dd>
+          <dt>Por que aumento de dados só no treino?</dt>
+          <dd>O teste precisa medir o desempenho em fotos reais.</dd>
+        </dl>
+        <h3>A rede</h3>
+        <dl class="perguntas">
+          <dt>Por que CNN e não uma rede comum (densa)?</dt>
+          <dd>O mesmo filtro percorre a imagem inteira, então a rede precisa de muito menos parâmetros e reconhece o padrão em qualquer posição.</dd>
+          <dt>Quantos parâmetros tem uma convolução?</dt>
+          <dd><code>3 · 3 · canais_de_entrada · filtros + filtros</code> (o último termo é o bias). Por exemplo, <code>conv2</code> tem 3·3·32·64 + 64 = 18.496. A tabela da seção 7 mostra todas as camadas.</dd>
+          <dt>O que faz o pooling?</dt>
+          <dd>Reduz a imagem pela metade (menos contas) e torna a rede tolerante a pequenos deslocamentos.</dd>
+          <dt>Para que serve o dropout?</dt>
+          <dd>Desligar neurônios ao acaso obriga a rede a não depender de poucos deles, o que reduz o overfitting.</dd>
+          <dt>Por que softmax?</dt>
+          <dd>Ele transforma as pontuações da última camada em probabilidades que somam 1, uma para cada integrante.</dd>
+          <dt>O que são época e batch?</dt>
+          <dd>Época é uma passada completa pelo treino. Batch é o grupo de fotos (32) usado em cada ajuste dos pesos.</dd>
+          <dt>Como a rede aprende?</dt>
+          <dd>Ela calcula o erro, o backpropagation calcula quanto cada peso contribuiu para ele, e o Adam ajusta os pesos para reduzir o erro.</dd>
+        </dl>
+        <h3>Métricas</h3>
+        <dl class="perguntas">
+          <dt>Precisão × recall?</dt>
+          <dd>A precisão olha a <strong>coluna</strong> da matriz: das vezes que a rede disse X, quantas eram X. O recall olha a <strong>linha</strong>: das fotos de X, quantas a rede acertou.</dd>
+          <dt>Por que não só a acurácia?</dt>
+          <dd>Se uma pessoa tiver muito mais fotos, a acurácia pode ser alta mesmo errando as outras.</dd>
+        </dl>
+        <h3>O site e o reconhecimento ao vivo</h3>
+        <dl class="perguntas">
+          <dt>Como reconhece várias pessoas ao vivo?</dt>
+          <dd>Sem detector de rosto, a rede não sabe onde estão os rostos. Por isso a tela é dividida em caixas fixas e cada pessoa se posiciona em uma. Achar rostos em qualquer lugar exigiria um detector (como os do OpenCV), que o trabalho não permite.</dd>
+          <dt>Quais são as limitações?</dt>
+          <dd>O rosto precisa estar dentro da caixa (no centro, com 1 pessoa). Além disso, o softmax sempre escolhe alguém; por isso usamos o limiar de 60% para “desconhecido”.</dd>
+          <dt>Por que a rede roda no servidor e não no navegador?</dt>
+          <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
+          <dt>Por que a média de 5 quadros?</dt>
+          <dd>Para o nome não “piscar” quando um quadro isolado sai diferente. Com ~4 quadros por segundo, a média cobre pouco mais de 1 segundo.</dd>
+          <dt>O vídeo espelhado não atrapalha a rede?</dt>
+          <dd>Não: o espelhamento é só visual (CSS). O quadro enviado ao servidor é o original, como as fotos de treino; apenas a posição das caixas é espelhada no desenho.</dd>
+          <dt>O código desta página pode estar desatualizado?</dt>
+          <dd>Não: os blocos de código são lidos do próprio arquivo Python pela rota <code>/api/codigo</code> (com <code>inspect.getsource</code>), e as métricas vêm do <code>resultados.json</code> gerado no último treino.</dd>
+        </dl>
+      </article>
+    </div>
+  </div>
+</section>
 </main>
+
+<footer class="rodape">
+  <div class="largura">CNN treinada do zero com TensorFlow/Keras · tratamento das imagens e métricas com NumPy · site em HTML, CSS e JavaScript puros.</div>
+</footer>
 
 <script src="js/ao_vivo.js"></script>
 <script src="js/coleta.js"></script>
+<script src="js/documentacao.js"></script>
 </body>
 </html>
