@@ -225,8 +225,56 @@ pre.codigo, pre.bloco {
 pre.codigo:empty::before { content: "Carregando o código..."; color: var(--texto-suave); }
 pre code { background: none; padding: 0; font-size: inherit; }
 .comentario { color: var(--codigo-comentario); font-style: italic; }
-.codigo-recolhido { margin: 14px 0; }
-.codigo-recolhido summary { cursor: pointer; font: 600 0.85rem var(--fonte-codigo); color: var(--destaque); }
+
+/* Resumo de uma frase no começo de cada seção e caixa "Como ler" */
+.resumo { font-size: 1.08rem; color: var(--texto); border-left: 4px solid var(--destaque); padding-left: 14px; }
+.como-ler { background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px; margin: 18px 0; max-width: 78ch; }
+.exemplo-botao { font: 600 0.85rem var(--fonte-codigo); color: var(--destaque); white-space: nowrap; }
+.exemplo-linha { background: color-mix(in srgb, var(--destaque) 14%, transparent); padding: 0 4px; border-radius: 3px; }
+
+/* Passo a passo: o texto vem primeiro; o código fica dentro de "Ver no código" */
+.passos { padding-left: 1.6em; display: flex; flex-direction: column; gap: 14px; margin: 14px 0; }
+.passos > li { padding-left: 4px; max-width: none; }
+.passos > li::marker { font-weight: 700; color: var(--destaque); }
+.passos > li > strong:first-of-type { color: var(--texto); }
+.passos.ciclo > li > .lado { margin-right: 4px; }
+
+.no-codigo { margin: 10px 0 2px; }
+.no-codigo > summary {
+  cursor: pointer; display: inline-block; list-style-position: inside;
+  font: 600 0.82rem var(--fonte-codigo); color: var(--destaque);
+  padding: 4px 10px; border: 1px solid var(--borda); border-radius: 6px; background: var(--superficie);
+}
+.no-codigo > summary:hover { border-color: var(--destaque); }
+.no-codigo[open] { border: 1px solid var(--borda); border-radius: 8px; background: var(--superficie); padding: 8px 12px 10px; }
+.no-codigo pre.codigo { margin-top: 10px; }
+
+/* Linhas do código: cada linha é um bloco; as explicadas ganham destaque e um número na margem */
+pre.codigo { padding-left: 40px; }
+pre.codigo code { display: block; }
+.linha { display: block; position: relative; width: max-content; min-width: 100%; border-radius: 3px; }
+.linha.anotada { background: color-mix(in srgb, var(--destaque) 12%, transparent); cursor: help; }
+.linha.anotada::before {
+  content: attr(data-n); position: absolute; left: -30px; top: 0.2em;
+  width: 1.4em; height: 1.4em; border-radius: 50%; text-align: center;
+  background: var(--destaque); color: var(--destaque-texto); font: 700 0.68rem/1.4em var(--fonte-texto); font-style: normal;
+}
+.linha.ativa, .linha.anotada:hover { background: color-mix(in srgb, var(--destaque) 30%, transparent); }
+
+/* Lista "Como o código faz isso", com os mesmos números das linhas */
+ol.notas { margin: 4px 0 0; padding-left: 1.9em; font-size: 0.9rem; display: flex; flex-direction: column; gap: 3px; }
+ol.notas::before { content: "Como o código faz isso (passe o mouse ou toque em um item para destacar a linha):";
+  display: block; margin: 0 0 4px -1.9em; font-weight: 600; color: var(--texto-suave); font-size: 0.82rem; }
+ol.notas li { cursor: pointer; padding: 2px 6px; border-radius: 4px; max-width: none; }
+ol.notas li::marker { font-weight: 700; color: var(--destaque); }
+ol.notas li:hover, ol.notas li.ativa { background: color-mix(in srgb, var(--destaque) 14%, transparent); }
+
+/* Balão com a explicação de uma linha (posicionado pelo JavaScript) */
+.dica-codigo {
+  position: fixed; z-index: 50; max-width: min(420px, calc(100vw - 24px));
+  background: var(--texto); color: var(--fundo); padding: 8px 12px; border-radius: 8px;
+  font-size: 0.88rem; line-height: 1.45; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); pointer-events: none;
+}
 
 /* Figuras */
 .figura { margin: 18px 0; }

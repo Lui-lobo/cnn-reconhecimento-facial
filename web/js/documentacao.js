@@ -1,37 +1,93 @@
 // Documentação: preenche a página com o código real, as imagens e os números do último treino.
-// - <pre data-codigo="modulo/funcao">  -> código Python lido de src/ pela rota /api/codigo
+// - <pre data-codigo="modulo/funcao">  -> código Python de src/ (ou do servidor.js) lido pela rota /api/codigo
 // - <pre data-js="arquivo.js#funcao">  -> uma função JavaScript lida do próprio arquivo do site
+// - <ol class="notas"> logo depois do <pre> -> cada <li data-trecho="..."> explica a linha do código que contém
+//   aquele trecho: a linha ganha um número e um destaque, e passar o mouse mostra a explicação num balão
 // - <img data-resultado="nome">        -> imagem gerada pelo treino em img/resultados/nome.png
 // - tabelas com id                     -> montadas a partir de /api/resultados (resultados.json)
 
 const porcento = (v) => (v * 100).toFixed(1).replace(".", ",") + "%";   // 0.953 -> "95,3%"
 const numero = (v) => Number(v).toLocaleString("pt-BR");                 // 18496 -> "18.496"
 
-// ---------- Blocos de código ----------
+// ---------- Blocos de código anotados ----------
+
+const dica = document.createElement("div");   // balão que mostra a explicação de uma linha
+dica.className = "dica-codigo";
+dica.hidden = true;
+document.body.append(dica);
 
 function escaparHTML(texto) {
   // Troca os caracteres especiais do HTML para o código aparecer como texto
   return texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function colorirComentarios(codigo, marcador) {
-  // Destaca os comentários (# no Python, // no JavaScript) com outra cor, linha por linha
+function colorirLinha(linha, marcador) {
+  // Destaca o comentário da linha (# no Python, // no JavaScript) com outra cor
   const regra = marcador === "#" ? /(^|\s)(#.*)$/ : /(^|\s)(\/\/.*)$/;
-  return escaparHTML(codigo).split("\n")
-    .map((linha) => linha.replace(regra, '$1<span class="comentario">$2</span>'))
-    .join("\n");
+  return escaparHTML(linha).replace(regra, '$1<span class="comentario">$2</span>');
+}
+
+function mostrarDica(linha, texto) {
+  // Abre o balão logo abaixo da linha (ou acima, se não couber na tela)
+  dica.textContent = texto;
+  dica.hidden = false;
+  const caixa = linha.getBoundingClientRect();
+  const largura = Math.min(420, window.innerWidth - 24);
+  dica.style.left = Math.max(12, Math.min(caixa.left + 24, window.innerWidth - largura - 12)) + "px";
+  const abaixo = caixa.bottom + 6;
+  dica.style.top = (abaixo + dica.offsetHeight > window.innerHeight ? caixa.top - dica.offsetHeight - 6 : abaixo) + "px";
+}
+
+function esconderDica() {
+  dica.hidden = true;
+}
+
+function ligarNotas(pre, notas) {
+  // Liga cada nota à sua linha nos dois sentidos: mouse na linha -> balão e nota acesa; mouse na nota -> linha acesa
+  pre.querySelectorAll(".linha.anotada").forEach((linha) => {
+    const nota = notas[linha.dataset.nota];
+    linha.addEventListener("mouseenter", () => { mostrarDica(linha, nota.textContent); nota.classList.add("ativa"); });
+    linha.addEventListener("mouseleave", () => { esconderDica(); nota.classList.remove("ativa"); });
+  });
+  notas.forEach((nota) => {
+    const linha = pre.querySelector(`.linha[data-nota="${nota.dataset.indice}"]`);
+    if (!linha) return;
+    nota.addEventListener("mouseenter", () => linha.classList.add("ativa"));
+    nota.addEventListener("mouseleave", () => linha.classList.remove("ativa"));
+    nota.addEventListener("click", () => {          // no celular: um toque acende a linha e rola a página até ela
+      linha.classList.toggle("ativa");
+      const caixa = linha.getBoundingClientRect();    // rola só na vertical, para os números da margem continuarem visíveis
+      if (caixa.top < 0 || caixa.bottom > window.innerHeight) {
+        window.scrollBy({ top: caixa.top - window.innerHeight / 3, behavior: "smooth" });
+      }
+    });
+  });
 }
 
 function mostrarCodigo(pre, titulo, codigo, marcador) {
-  // Coloca o código no <pre> com um título em cima; os blocos "recolhidos" ficam dentro de um <details>
-  pre.innerHTML = "<code>" + colorirComentarios(codigo, marcador) + "</code>";
-  if (pre.classList.contains("recolhido")) {
-    const caixa = document.createElement("details");
-    caixa.className = "codigo-recolhido";
-    caixa.innerHTML = "<summary></summary>";
-    caixa.firstChild.textContent = "Mostrar o código: " + titulo;
-    pre.replaceWith(caixa);
-    caixa.append(pre);
+  // Coloca o código no <pre>, uma linha por <span>, e marca as linhas explicadas pelas notas logo abaixo
+  const linhas = codigo.split("\n");
+  const lista = pre.nextElementSibling?.matches("ol.notas") ? pre.nextElementSibling : null;
+  const notas = lista ? [...lista.children] : [];
+  const notaDaLinha = {};                                   // número da linha -> índice da nota que a explica
+  notas.forEach((nota, i) => {
+    nota.dataset.indice = i;
+    const n = linhas.findIndex((linha) => linha.includes(nota.dataset.trecho));
+    if (n >= 0) notaDaLinha[n] = i;
+    else console.warn(`Trecho não encontrado em ${titulo}: ${nota.dataset.trecho}`);
+  });
+  pre.innerHTML = "<code>" + linhas.map((linha, n) => {
+    const html = colorirLinha(linha, marcador) || " ";      // linha vazia ganha um espaço para manter a altura
+    if (!(n in notaDaLinha)) return `<span class="linha">${html}</span>`;
+    const i = notaDaLinha[n];
+    return `<span class="linha anotada" data-nota="${i}" data-n="${i + 1}">${html}</span>`;
+  }).join("") + "</code>";
+  ligarNotas(pre, notas);
+
+  // O título vai no botão "Ver no código" (ou acima do bloco, se ele não estiver dentro de um)
+  const botao = pre.closest("details.no-codigo")?.querySelector("summary");
+  if (botao) {
+    botao.textContent = "Ver no código · " + titulo;
   } else {
     const legenda = document.createElement("div");
     legenda.className = "codigo-titulo";
@@ -212,6 +268,7 @@ function acompanharIndice() {
 
 // ---------- Início ----------
 
+window.addEventListener("scroll", esconderDica, { passive: true });   // o balão não fica "solto" ao rolar a página
 const arquivosJS = {};
 document.querySelectorAll("pre[data-codigo]").forEach(carregarCodigoPython);
 document.querySelectorAll("pre[data-js]").forEach((pre) => carregarCodigoJS(pre, arquivosJS));
