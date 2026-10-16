@@ -1,0 +1,19 @@
+# Arquivos que o git deve ignorar
+
+# Ambiente virtual e cache do Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Datasets temporários usados só para testar o pipeline (ex.: dataset sintético)
+dataset_teste/
+dataset_sintetico/
+
+# Arquivos do sistema e de editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.ipynb_checkpoints/
