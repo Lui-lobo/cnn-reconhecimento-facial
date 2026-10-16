@@ -52,19 +52,22 @@ def main():
     np.random.seed(SEED)          # mesma semente do notebook: o resultado se repete a cada execução
     tf.random.set_seed(SEED)
 
-    # 1. Leitura das fotos
+    # As linhas "Etapa N/8" mostram o andamento no terminal e na barra de progresso do site
+    print("Etapa 1/8: leitura das fotos")
     classes, caminhos, rotulos = listar_dataset(DATASET_DIR)
     assert len(classes) >= 2, f"São necessários pelo menos 2 integrantes com fotos em {DATASET_DIR}."
     print("Integrantes:")
     for numero, nome in enumerate(classes):
         print(f"  {numero} = {nome}: {np.sum(rotulos == numero)} fotos")
 
-    # 2. Pré-processamento de todas as fotos (mesma função usada no reconhecimento ao vivo)
+    # Pré-processamento de todas as fotos (mesma função usada no reconhecimento ao vivo)
+    print("Etapa 2/8: pré-processamento")
     X = np.array([preprocessar(ler_imagem(c)) for c in caminhos])
     y = rotulos
     print("X:", X.shape, "-> (quantidade de fotos, altura, largura, canais)")
 
-    # 3. Divisão em treino, validação e teste por blocos de fotos seguidas
+    # Divisão em treino, validação e teste por blocos de fotos seguidas
+    print("Etapa 3/8: divisão em treino, validação e teste")
     idx_treino, idx_val, idx_teste = dividir_dados(y, classes)
     X_treino, y_treino = X[idx_treino], y[idx_treino]
     X_val,    y_val    = X[idx_val],    y[idx_val]
@@ -74,17 +77,21 @@ def main():
     visualizacoes.fotos_originais(classes, caminhos, rotulos)
     visualizacoes.etapas_preprocessamento(classes, caminhos, rotulos)
 
-    # 4. Aumento de dados (só no treino)
+    # Aumento de dados (só no treino)
+    print("Etapa 4/8: aumento de dados")
     visualizacoes.exemplos_aumento(classes, X_treino, y_treino)
     X_treino_final, y_treino_final = montar_treino_aumentado(X_treino, y_treino)
     print(f"Treino: {len(X_treino)} fotos originais -> {len(X_treino_final)} com o aumento de dados")
 
-    # 5. Montagem da CNN e 6. Treinamento
+    # Montagem da CNN e treinamento
+    print("Etapa 5/8: montagem da CNN")
     model = construir_cnn(len(classes))
     model.summary()
+    print(f"Etapa 6/8: treinamento (até {EPOCAS} épocas)")
     historico = treinar_rede(model, X_treino_final, y_treino_final, X_val, y_val)
 
-    # 7. Avaliação no conjunto de teste
+    # Avaliação no conjunto de teste
+    print("Etapa 7/8: avaliação no conjunto de teste")
     y_previsto = model.predict(X_teste, verbose=0).argmax(axis=1)
     matriz = matriz_confusao(y_teste, y_previsto, len(classes))
     m = calcular_metricas(matriz)
@@ -92,7 +99,8 @@ def main():
                  for nome, Xc, yc in [("treino", X_treino, y_treino), ("validacao", X_val, y_val),
                                       ("teste", X_teste, y_teste)]}
 
-    # 8. Imagens intermediárias da avaliação e da rede
+    # Imagens intermediárias da avaliação e da rede
+    print("Etapa 8/8: imagens intermediárias e gravação do modelo")
     visualizacoes.curvas_treino(historico)
     visualizacoes.desenhar_matriz(matriz, classes)
     visualizacoes.barras_metricas(m, classes)
@@ -100,11 +108,13 @@ def main():
     visualizacoes.mapas_caracteristicas(model, X_teste[0], classes[y_teste[0]])
     visualizacoes.gradcam_por_integrante(model, X_teste, y_teste, classes)
 
-    # Salva o modelo, os nomes dos integrantes e todos os resultados (lidos pelo site)
+    # Salva os nomes dos integrantes, o modelo e todos os resultados (lidos pelo site).
+    # Os nomes vão ANTES do modelo: o servidor recarrega o modelo quando o arquivo .keras muda,
+    # e nessa hora os nomes novos já precisam estar prontos.
     os.makedirs(MODELO_DIR, exist_ok=True)
-    model.save(CAMINHO_MODELO)
     with open(CAMINHO_CLASSES, "w", encoding="utf-8") as f:
         json.dump(classes, f, ensure_ascii=False)
+    model.save(CAMINHO_MODELO)
 
     contar = lambda yc: {nome: int(np.sum(yc == c)) for c, nome in enumerate(classes)}   # fotos por integrante
     resultados = {

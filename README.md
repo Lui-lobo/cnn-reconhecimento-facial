@@ -78,10 +78,10 @@ indique o caminho do Python na variável de ambiente `PYTHON`.
 
 Cada integrante precisa de uma pasta `dataset/<nome>/` com as fotos dele. Há duas formas:
 
-- **Pelo site:** rode `npm start`, abra `http://localhost:5000` e use a seção
-  **“Coletar fotos de um integrante para o dataset”**. Digite o nome, clique em “Iniciar captura”: depois de
-  uma contagem de 3 s, a página tira N fotos (padrão 80, uma a cada 250 ms) e salva em `dataset/<nome>/`,
-  continuando a numeração.
+- **Pelo site:** rode `npm start`, abra `http://localhost:5000` e use a área **“Preparar o modelo”**, passo 1
+  (ela abre sozinha enquanto não houver modelo treinado). Digite o nome (ou clique em um nome já cadastrado),
+  clique em “Iniciar captura”: depois de uma contagem de 3 s, a página tira N fotos (padrão 80, uma a cada 250 ms)
+  e salva em `dataset/<nome>/`, continuando a numeração.
 - **Copiando arquivos:** coloque fotos `.jpg`, `.jpeg` ou `.png` em `dataset/<nome>/`. Os arquivos são lidos em
   ordem alfabética, que deve ser a ordem em que foram tirados (ex.: `ana_0000.jpg`, `ana_0001.jpg`...).
 
@@ -93,6 +93,14 @@ Dicas para a rede aprender o rosto, e não o fundo:
 - nomes de pasta só com letras minúsculas sem acento, números, `_` ou `-` (pastas que começam com `.` ou `_` são ignoradas).
 
 ### 4. Treinar
+
+**Pelo site (mais fácil):** na área “Preparar o modelo”, passo 2, a página mostra quantas fotos cada integrante tem
+e avisa o que falta (pelo menos 2 integrantes e 3 fotos por pessoa). Clique em **Treinar modelo** e acompanhe a
+barra de progresso (etapa, época e acurácia na validação) e o log. Marcando **“Treinar automaticamente depois da
+coleta”** no passo 1, o treino começa sozinho quando as fotos são salvas. Sem GPU, o treino leva alguns minutos
+(mais fotos, mais tempo); dá para cancelar a qualquer momento sem perder o modelo anterior.
+
+**Pelo terminal:** é o mesmo comando que o site usa por trás.
 
 ```bash
 python -m src.treinar

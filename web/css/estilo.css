@@ -126,15 +126,44 @@ code { font-family: var(--fonte-codigo); font-size: 0.9em; background: var(--cod
 .barra-cheia { height: 100%; background: var(--destaque); border-radius: 7px; }
 .barra.vencedora .barra-cheia { background: var(--verde); }
 
-/* Coleta de fotos */
-.coleta { margin-top: 24px; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); }
-.coleta summary { cursor: pointer; padding: 14px 18px; font-weight: 600; }
-.coleta-grade { display: grid; grid-template-columns: 1fr minmax(0, 360px); gap: 20px; padding: 0 18px 18px; }
-.coleta-grade > div:first-child { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+/* Preparar o modelo: coleta (passo 1) e treino (passo 2) */
+.preparo { margin-top: 24px; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); }
+.preparo > summary { cursor: pointer; padding: 14px 18px; font-weight: 600; }
+.preparo-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 0 18px; }
+.passo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.passo h3 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
+.passo-final { display: flex; align-items: center; gap: 10px; padding: 0 18px 4px; margin: 14px 0; }
+.coleta-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 16px; align-items: start; }
+.coleta-campos { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+/* Botões com os nomes já cadastrados */
+.fichas { display: flex; flex-wrap: wrap; gap: 6px; }
+.fichas:empty { display: none; }
+.ficha { font: inherit; font-size: 0.85rem; cursor: pointer; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--borda); background: var(--superficie-2); color: var(--texto); }
+.ficha:hover { border-color: var(--destaque); color: var(--destaque); }
+
+/* Tabela de fotos por integrante e avisos */
+.dataset { display: flex; flex-direction: column; gap: 6px; }
+.avisos { margin: 0; padding-left: 1.2em; font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px; }
+.avisos:empty { display: none; }
+.avisos .bloqueio { color: var(--vermelho); font-weight: 600; }
+.avisos .dica { color: var(--texto-suave); }
+
+/* Progresso e log do treino */
+.progresso { display: flex; flex-direction: column; gap: 6px; }
+.progresso p { margin: 0; }
+.progresso-etapa { font-weight: 600; }
+.progresso-detalhe { color: var(--texto-suave); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.progresso .barra-cheia { transition: width 0.4s; }
+.log summary { cursor: pointer; color: var(--destaque); font-size: 0.9rem; font-weight: 600; }
+.log pre { max-height: 280px; overflow: auto; font-size: 0.75rem; white-space: pre; }
 
 /* ---------- Celular e telas estreitas ---------- */
+@media (max-width: 1000px) { .preparo-grade { grid-template-columns: 1fr; } }
 @media (max-width: 800px) {
   .app-grade, .coleta-grade { grid-template-columns: 1fr; }
+  .moldura.pequena { max-width: none; }
 }
 
 /* ======================= Documentação ======================= */

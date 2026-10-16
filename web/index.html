@@ -69,27 +69,59 @@
     <div id="barras" class="barras"></div>
   </section>
 
-  <!-- Coleta de fotos para o dataset (seção recolhível) -->
-  <details class="coleta" id="coleta">
-    <summary>Coletar fotos de um integrante para o dataset</summary>
-    <div class="coleta-grade">
-      <div>
-        <label class="campo" for="coleta-nome">Nome do integrante (vira o nome da pasta)
-          <input type="text" id="coleta-nome" placeholder="ex.: ana" autocomplete="off">
-        </label>
-        <label class="campo" for="coleta-n">Quantidade de fotos (uma a cada 250 ms)
-          <input type="number" id="coleta-n" value="80" min="1" max="400">
-        </label>
-        <button id="coleta-iniciar" class="botao principal">Iniciar captura</button>
-        <p id="coleta-status" class="status">Centralize o rosto e mexa levemente a cabeça durante a captura.</p>
-        <p class="aviso">Depois de coletar as fotos de todos, rode <code>python -m src.treinar</code> de novo
-          para a rede aprender com elas.</p>
-      </div>
-      <div class="moldura pequena">
-        <video id="coleta-video" class="espelhado" playsinline muted></video>
-        <p id="coleta-contagem" class="contagem"></p>
-      </div>
+  <!-- Preparar o modelo: coleta das fotos e treino da rede, sem precisar do terminal (seção recolhível).
+       Abre sozinha quando ainda não existe modelo treinado. -->
+  <details class="preparo" id="preparo">
+    <summary>Preparar o modelo: coletar fotos e treinar a rede</summary>
+    <div class="preparo-grade">
+
+      <!-- Passo 1: coleta -->
+      <section class="passo">
+        <h3><span class="numero">1</span> Coletar fotos</h3>
+        <div class="coleta-grade">
+          <div class="coleta-campos">
+            <label class="campo" for="coleta-nome">Nome do integrante (vira o nome da pasta)
+              <input type="text" id="coleta-nome" placeholder="ex.: ana" autocomplete="off">
+            </label>
+            <div id="coleta-nomes" class="fichas" aria-label="Integrantes já cadastrados"></div>
+            <label class="campo" for="coleta-n">Quantidade de fotos (uma a cada 250 ms)
+              <input type="number" id="coleta-n" value="80" min="1" max="400">
+            </label>
+            <label class="campo linha"><input type="checkbox" id="coleta-treinar"> Treinar automaticamente depois da coleta</label>
+            <button id="coleta-iniciar" class="botao principal">Iniciar captura</button>
+          </div>
+          <div class="moldura pequena">
+            <video id="coleta-video" class="espelhado" playsinline muted></video>
+            <p id="coleta-contagem" class="contagem"></p>
+          </div>
+        </div>
+        <p id="coleta-status" class="status">Centralize o rosto e mexa levemente a cabeça durante a captura.
+          Façam 2 ou 3 capturas por pessoa, em lugares e iluminações diferentes.</p>
+      </section>
+
+      <!-- Passo 2: treino -->
+      <section class="passo">
+        <h3><span class="numero">2</span> Treinar a rede</h3>
+        <div id="dataset-tabela" class="dataset"></div>
+        <ul id="dataset-avisos" class="avisos"></ul>
+        <div class="botoes">
+          <button id="treinar" class="botao principal" disabled>Treinar modelo</button>
+          <button id="cancelar-treino" class="botao" hidden>Cancelar</button>
+        </div>
+        <div id="treino-progresso" class="progresso" hidden>
+          <p id="treino-etapa" class="progresso-etapa"></p>
+          <div class="barra-fundo"><div id="treino-barra" class="barra-cheia"></div></div>
+          <p id="treino-detalhe" class="progresso-detalhe"></p>
+        </div>
+        <p id="treino-status" class="status" hidden></p>
+        <details class="log">
+          <summary>Ver o log do treino</summary>
+          <pre id="treino-log" class="bloco"></pre>
+        </details>
+      </section>
     </div>
+    <p class="aviso passo-final"><span class="numero">3</span> Depois do treino, ligue a webcam lá em cima:
+      o servidor passa a usar o modelo novo sozinho, sem reiniciar.</p>
   </details>
 </section>
 
@@ -168,7 +200,7 @@
 ├── ana/     ana_0000.jpg, ana_0001.jpg, ...
 ├── bruno/   ...
 └── carla/   ...</pre>
-        <p>As fotos podem ser tiradas na própria página (seção “Coletar fotos” lá em cima) ou copiadas para a pasta.
+        <p>As fotos podem ser tiradas na própria página (área “Preparar o modelo”, passo 1, lá em cima) ou copiadas para a pasta.
           No navegador, o JavaScript liga a webcam com <code>navigator.mediaDevices.getUserMedia</code>, faz uma contagem
           de 3 segundos e tira uma foto a cada 250 ms. As fotos viajam como texto (JPEG em base64) até o servidor,
           que as salva continuando a numeração.</p>
@@ -358,6 +390,20 @@
         </figure>
         <p>O script <code>src/treinar.py</code> junta todas as etapas, na mesma ordem do notebook:</p>
         <pre class="codigo recolhido" data-codigo="treinar/main"></pre>
+
+        <h3>Treinar pelo site</h3>
+        <p>Não é preciso usar o terminal: na área “Preparar o modelo” (passo 2), a página mostra quantas fotos cada
+          integrante tem, avisa o que falta (pelo menos 2 integrantes e 3 fotos por pessoa; o recomendado é 150 ou mais)
+          e tem o botão <strong>Treinar modelo</strong>. Com a opção “Treinar automaticamente depois da coleta”, o treino
+          começa sozinho assim que as fotos são salvas.</p>
+        <p>Por trás, o servidor Node roda o <strong>mesmo</strong> comando do terminal, <code>python -m src.treinar</code>,
+          e guarda cada linha que ele imprime. A página consulta essas linhas a cada segundo
+          (<code>GET /api/treino</code>) e tira delas a etapa atual (“Etapa 6/8”), a época (“Epoch 12/60”, impresso pelo
+          Keras) e a acurácia na validação, para desenhar a barra de progresso. Quando o treino termina, o servidor de
+          reconhecimento percebe que o arquivo do modelo mudou e passa a usá-lo sozinho, e esta documentação recarrega
+          as métricas e as imagens. Cancelar é seguro: os arquivos do modelo só são gravados no fim.</p>
+        <pre class="codigo recolhido" data-codigo="servidor/iniciarTreino"></pre>
+        <pre class="codigo recolhido" data-js="treino.js#desenharTreino"></pre>
       </article>
 
       <!-- 9. Avaliação -->
@@ -550,6 +596,8 @@
           <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
           <dt>Por que um servidor Node e um processo Python?</dt>
           <dd>Cada um faz o que faz melhor: o Node cuida do HTTP (site, rotas, gravação das fotos) e o Python cuida só da rede neural. Eles conversam pelo stdin/stdout, uma linha de JSON por pedido; o Python fica aberto o tempo todo, então o modelo é carregado uma vez só.</dd>
+          <dt>Como o site mostra o progresso do treino?</dt>
+          <dd>O servidor Node roda <code>python -m src.treinar</code> e guarda o que ele imprime. A página pergunta a cada segundo como está o treino e lê as linhas “Etapa N/8” e “Epoch N/60” para desenhar a barra.</dd>
           <dt>Por que a média de 5 quadros?</dt>
           <dd>Para o nome não “piscar” quando um quadro isolado sai diferente. Com ~4 quadros por segundo, a média cobre pouco mais de 1 segundo.</dd>
           <dt>O vídeo espelhado não atrapalha a rede?</dt>
@@ -569,6 +617,7 @@
 
 <script src="js/ao_vivo.js"></script>
 <script src="js/coleta.js"></script>
+<script src="js/treino.js"></script>
 <script src="js/documentacao.js"></script>
 </body>
 </html>

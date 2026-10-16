@@ -14,6 +14,8 @@ const PASTA_WEB = path.join(RAIZ, "web");
 const PASTA_SRC = path.join(RAIZ, "src");
 const DATASET_DIR = process.env.DATASET_DIR || path.join(RAIZ, "dataset");   // mesma variável do src/config.py
 const CAMINHO_RESULTADOS = path.join(RAIZ, "modelo", "resultados.json");
+const CAMINHO_MODELO = path.join(RAIZ, "modelo", "modelo_cnn.keras");
+const MINIMO_FOTOS = 3;          // a divisão em treino/validação/teste precisa de pelo menos 3 fotos por pessoa
 const MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro.";
 const PORTA = 5000;
 
@@ -72,6 +74,19 @@ async function responderComPython(res, pedido) {
 }
 
 // ======================= Funções da API =======================
+
+function listarDataset() {
+  // Lista os integrantes (subpastas de dataset/) e quantas fotos cada um tem, com as mesmas regras do Python:
+  // ignora pastas que começam com "." ou "_" e conta só .jpg, .jpeg e .png
+  if (!fs.existsSync(DATASET_DIR)) return [];
+  return fs.readdirSync(DATASET_DIR, { withFileTypes: true })
+    .filter((item) => item.isDirectory() && !/^[._]/.test(item.name))
+    .map((item) => item.name).sort()
+    .map((nome) => ({
+      nome,
+      fotos: fs.readdirSync(path.join(DATASET_DIR, nome)).filter((arquivo) => /\.(jpe?g|png)$/i.test(arquivo)).length,
+    }));
+}
 
 function salvarFotos(nome, imagens) {
   // Salva as fotos (JPEG em base64) em dataset/<nome>/, continuando a numeração já existente
@@ -150,6 +165,59 @@ app.get("/api/codigo/:modulo/:funcao", (req, res) => {
   const codigo = /^\w+$/.test(funcao) && extrairFuncao(fs.readFileSync(path.join(RAIZ, arquivo), "utf-8"), funcao, arquivo.endsWith(".py"));
   if (!codigo) return res.status(404).json({ erro: "Função não encontrada." });
   res.json({ arquivo, funcao, codigo });
+});
+
+// Situação do dataset: fotos por integrante e se já existe um modelo treinado
+app.get("/api/dataset", (req, res) => {
+  res.json({ integrantes: listarDataset(), minimo_fotos: MINIMO_FOTOS, modelo_treinado: fs.existsSync(CAMINHO_MODELO) });
+});
+
+// ======================= Treino pelo site =======================
+
+const treino = { rodando: false, linhas: [], inicio: null, fim: null, codigo: null };   // situação do último treino
+let processoTreino = null;
+
+function iniciarTreino() {
+  // Roda "python -m src.treinar" (o mesmo comando do terminal) e guarda cada linha que ele imprime.
+  // O site consulta essas linhas a cada segundo para mostrar a etapa, a época e o log.
+  Object.assign(treino, { rodando: true, linhas: [], inicio: Date.now(), fim: null, codigo: null });
+  processoTreino = spawn(caminhoDoPython(), ["-u", "-m", "src.treinar"], {   // -u: cada linha sai na hora
+    cwd: RAIZ,
+    env: { ...process.env, PYTHONIOENCODING: "utf-8", TF_CPP_MIN_LOG_LEVEL: "2" },   // acentos certos e menos avisos do TF
+  });
+  const guardarLinha = (linha) => { if (linha.trim()) treino.linhas.push(linha); };
+  readline.createInterface({ input: processoTreino.stdout }).on("line", guardarLinha);
+  readline.createInterface({ input: processoTreino.stderr }).on("line", guardarLinha);   // avisos e erros também
+  const terminar = (codigo) => {
+    Object.assign(treino, { rodando: false, fim: Date.now(), codigo });
+    processoTreino = null;
+  };
+  processoTreino.on("error", (erro) => { guardarLinha("Não foi possível abrir o Python: " + erro.message); terminar(-1); });
+  processoTreino.on("close", terminar);    // código 0 = deu certo
+}
+
+// Começa um treino (só um por vez), depois de conferir se o dataset tem o mínimo necessário
+app.post("/api/treino", (req, res) => {
+  if (treino.rodando) return res.status(409).json({ erro: "Já existe um treino em andamento." });
+  const integrantes = listarDataset();
+  if (integrantes.length < 2) return res.status(400).json({ erro: "São necessários pelo menos 2 integrantes com fotos." });
+  const comPoucas = integrantes.find((i) => i.fotos < MINIMO_FOTOS);
+  if (comPoucas) return res.status(400).json({ erro: `${comPoucas.nome} tem só ${comPoucas.fotos} foto(s): o mínimo é ${MINIMO_FOTOS}.` });
+  iniciarTreino();
+  res.json(treino);
+});
+
+// Situação do treino: se está rodando e as linhas impressas até agora
+app.get("/api/treino", (req, res) => res.json(treino));
+
+// Cancela o treino em andamento (o modelo anterior continua valendo: os arquivos só são gravados no fim)
+app.post("/api/treino/cancelar", (req, res) => {
+  if (processoTreino) {
+    // No Windows, o taskkill /T encerra também o processo Python aberto pelo .venv
+    if (process.platform === "win32") spawn("taskkill", ["/pid", String(processoTreino.pid), "/T", "/F"]);
+    else processoTreino.kill();
+  }
+  res.json({ ok: true });
 });
 
 const servidor = app.listen(PORTA, "127.0.0.1", () => {

@@ -1,6 +1,7 @@
 // Coleta de fotos para o dataset pelo navegador.
 // Liga a webcam, faz uma contagem regressiva de 3 s, tira N fotos (uma a cada 250 ms) e envia para /api/fotos,
-// que salva em dataset/<nome>/. Usa esperar, enviarJSON, capturarQuadro e mostrarStatus de ao_vivo.js.
+// que salva em dataset/<nome>/. Depois atualiza a tabela do passo 2 e, se a opção estiver marcada, já começa o treino.
+// Usa esperar, enviarJSON, capturarQuadro e mostrarStatus de ao_vivo.js, e atualizarDataset/iniciarTreino de treino.js.
 
 const videoColeta = document.getElementById("coleta-video");
 const botaoColeta = document.getElementById("coleta-iniciar");
@@ -61,8 +62,12 @@ async function coletarFotos() {
   mostrarStatus(statusColeta, "Enviando as fotos para o servidor...");
   try {
     const r = await enviarJSON("/api/fotos", { nome, imagens: fotos });
-    mostrarStatus(statusColeta, `${r.salvas} fotos salvas em ${r.pasta}/. Quando terminar a coleta de todos, ` +
-      "rode python -m src.treinar de novo para retreinar a rede.");
+    const treinarAgora = document.getElementById("coleta-treinar").checked;
+    mostrarStatus(statusColeta, `${r.salvas} fotos salvas em ${r.pasta}/. ` + (treinarAgora
+      ? "Começando o treino (passo 2)..."
+      : "Quando terminar a coleta de todos, clique em “Treinar modelo” (passo 2)."));
+    await atualizarDataset();
+    if (treinarAgora) iniciarTreino();
   } catch (erro) {
     mostrarStatus(statusColeta, erro.message, true);
   }

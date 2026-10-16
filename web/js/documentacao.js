@@ -67,13 +67,22 @@ async function carregarCodigoJS(pre, arquivos) {
 // ---------- Imagens geradas pelo treino ----------
 
 function carregarImagens(versao) {
-  // Aponta cada <img data-resultado> para o PNG gerado; "?v=" força o navegador a buscar a versão nova após retreinar
+  // Aponta cada <img data-resultado> para o PNG gerado; "?v=" força o navegador a buscar a versão nova após retreinar.
+  // Se a imagem ainda não existe, ela fica escondida e um aviso aparece no lugar (até o próximo treino).
   document.querySelectorAll("img[data-resultado]").forEach((img) => {
+    let aviso = img.nextElementSibling?.classList.contains("sem-imagem") ? img.nextElementSibling : null;
+    img.onload = () => {
+      img.hidden = false;
+      if (aviso) aviso.remove();
+    };
     img.onerror = () => {
-      const aviso = document.createElement("p");
-      aviso.className = "sem-imagem";
-      aviso.textContent = `Imagem “${img.dataset.resultado}.png” ainda não gerada: rode python -m src.treinar.`;
-      img.replaceWith(aviso);
+      img.hidden = true;
+      if (!aviso) {
+        aviso = document.createElement("p");
+        aviso.className = "sem-imagem";
+        aviso.textContent = `Imagem “${img.dataset.resultado}.png” ainda não gerada: treine o modelo.`;
+        img.after(aviso);
+      }
     };
     img.src = `img/resultados/${img.dataset.resultado}.png` + (versao ? `?v=${encodeURIComponent(versao)}` : "");
   });
@@ -175,6 +184,7 @@ async function carregarResultados() {
     const r = await resposta.json();
     if (!resposta.ok) throw new Error(r.erro);
     preencherResultados(r);
+    document.getElementById("aviso-resultados").hidden = true;
     carregarImagens(r.gerado_em);
   } catch (erro) {
     const aviso = document.getElementById("aviso-resultados");
