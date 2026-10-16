@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<!-- Página única do projeto: reconhecimento ao vivo pela webcam no topo e documentação completa embaixo. -->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reconhecimento facial com CNN</title>
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+<header class="cabecalho">
+  <div class="largura">
+    <p class="sobretitulo">Trabalho de Ciência da Computação · CNN treinada do zero</p>
+    <h1>Reconhecimento dos integrantes do grupo</h1>
+    <p class="subtitulo">Uma Rede Neural Convolucional que reconhece quem está na frente da webcam.
+      Logo abaixo da aplicação está a <a href="#documentacao">documentação passo a passo</a>.</p>
+  </div>
+</header>
+
+<!-- ============================ PARTE 1: APLICAÇÃO ============================ -->
+<main>
+<section id="app" class="largura app">
+  <div class="app-grade">
+
+    <!-- Vídeo da webcam com uma tela (canvas) transparente por cima, onde desenhamos as caixas -->
+    <div class="moldura" id="moldura">
+      <video id="video" class="espelhado" playsinline muted></video>
+      <canvas id="sobreposicao"></canvas>
+      <p id="video-vazio" class="video-vazio">Webcam desligada</p>
+    </div>
+
+    <!-- Controles do reconhecimento -->
+    <div class="controles">
+      <div class="botoes">
+        <button id="ligar" class="botao principal">Ligar webcam</button>
+        <button id="parar" class="botao" disabled>Parar</button>
+      </div>
+
+      <fieldset class="campo">
+        <legend>Pessoas na frente da câmera</legend>
+        <label><input type="radio" name="n_pessoas" value="1" checked> 1 pessoa (caixa central)</label>
+        <label><input type="radio" name="n_pessoas" value="2"> 2 pessoas (caixas lado a lado)</label>
+      </fieldset>
+
+      <label class="campo" for="limiar">
+        Limiar de confiança: <strong><output id="limiar-valor">60%</output></strong>
+        <input type="range" id="limiar" min="30" max="95" step="5" value="60">
+        <small>Abaixo dele, a caixa mostra “desconhecido”.</small>
+      </label>
+
+      <label class="campo linha"><input type="checkbox" id="espelhar" checked> Mostrar o vídeo espelhado</label>
+
+      <button id="ver-rede" class="botao" disabled>Ver o que a rede vê</button>
+
+      <p id="status" class="status">Clique em “Ligar webcam” para começar.</p>
+      <div id="leitura" class="leitura"></div>
+    </div>
+  </div>
+
+  <!-- Painel do botão "Ver o que a rede vê": etapas, Grad-CAM e probabilidades do quadro congelado -->
+  <section id="visao-rede" class="visao-rede" hidden>
+    <div class="visao-topo">
+      <h2>O que a rede vê (quadro congelado)</h2>
+      <button id="voltar-ao-vivo" class="botao principal">Voltar ao vivo</button>
+    </div>
+    <div class="etapas" id="etapas"></div>
+    <div id="barras" class="barras"></div>
+  </section>
+
+  <!-- Coleta de fotos para o dataset (seção recolhível) -->
+  <details class="coleta" id="coleta">
+    <summary>Coletar fotos de um integrante para o dataset</summary>
+    <div class="coleta-grade">
+      <div>
+        <label class="campo" for="coleta-nome">Nome do integrante (vira o nome da pasta)
+          <input type="text" id="coleta-nome" placeholder="ex.: ana" autocomplete="off">
+        </label>
+        <label class="campo" for="coleta-n">Quantidade de fotos (uma a cada 250 ms)
+          <input type="number" id="coleta-n" value="80" min="1" max="400">
+        </label>
+        <button id="coleta-iniciar" class="botao principal">Iniciar captura</button>
+        <p id="coleta-status" class="status">Centralize o rosto e mexa levemente a cabeça durante a captura.</p>
+        <p class="aviso">Depois de coletar as fotos de todos, rode <code>python -m src.treinar</code> de novo
+          para a rede aprender com elas.</p>
+      </div>
+      <div class="moldura pequena">
+        <video id="coleta-video" class="espelhado" playsinline muted></video>
+        <p id="coleta-contagem" class="contagem"></p>
+      </div>
+    </div>
+  </details>
+</section>
+</main>
+
+<script src="js/ao_vivo.js"></script>
+<script src="js/coleta.js"></script>
+</body>
+</html>

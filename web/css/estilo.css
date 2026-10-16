@@ -1,0 +1,138 @@
+/* Estilo do site: visual limpo e acadêmico, com modo claro e escuro (segue a preferência do sistema). */
+
+/* ---------- Cores e medidas (modo claro) ---------- */
+:root {
+  --fundo: #f7f6f2;
+  --superficie: #ffffff;
+  --superficie-2: #efede6;
+  --texto: #1d1f23;
+  --texto-suave: #5b5f66;
+  --borda: #d9d6cc;
+  --destaque: #1f5f8b;
+  --destaque-texto: #ffffff;
+  --verde: #1e8a3c;
+  --vermelho: #c62828;
+  --codigo-fundo: #f1efe8;
+  --codigo-comentario: #6a737d;
+  --sombra: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --raio: 10px;
+  --fonte-texto: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fonte-titulo: Georgia, "Times New Roman", serif;
+  --fonte-codigo: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+
+/* ---------- Modo escuro ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #15171b;
+    --superficie: #1d2025;
+    --superficie-2: #262a31;
+    --texto: #e7e5df;
+    --texto-suave: #a3a7ae;
+    --borda: #343943;
+    --destaque: #6cb2e4;
+    --destaque-texto: #0d1117;
+    --verde: #4cc070;
+    --vermelho: #ef6b6b;
+    --codigo-fundo: #111316;
+    --codigo-comentario: #8b949e;
+    --sombra: none;
+    color-scheme: dark;
+  }
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 16px/1.6 var(--fonte-texto);
+}
+h1, h2, h3 { font-family: var(--fonte-titulo); line-height: 1.25; font-weight: 600; }
+a { color: var(--destaque); }
+img { max-width: 100%; }
+code { font-family: var(--fonte-codigo); font-size: 0.9em; background: var(--codigo-fundo); padding: 0.1em 0.35em; border-radius: 4px; }
+[hidden] { display: none !important; }
+
+.largura { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+/* ---------- Cabeçalho ---------- */
+.cabecalho { border-bottom: 1px solid var(--borda); background: var(--superficie); padding: 28px 0 22px; }
+.cabecalho h1 { margin: 4px 0 8px; font-size: clamp(1.6rem, 3.5vw, 2.4rem); }
+.sobretitulo { margin: 0; color: var(--texto-suave); font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.subtitulo { margin: 0; color: var(--texto-suave); max-width: 70ch; }
+
+/* ---------- Aplicação ---------- */
+.app { padding-top: 24px; padding-bottom: 32px; }
+.app-grade { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 24px; align-items: start; }
+
+/* Vídeo e tela de desenho ocupam exatamente o mesmo lugar */
+.moldura {
+  position: relative;
+  background: #000;
+  border-radius: var(--raio);
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+}
+.moldura video, .moldura canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.moldura video.espelhado { transform: scaleX(-1); }      /* só o vídeo é espelhado; o canvas não, para o texto não inverter */
+.video-vazio { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; color: #9aa0a6; }
+.moldura.pequena { max-width: 360px; }
+.contagem { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; color: #fff;
+            font: 700 clamp(1.4rem, 5vw, 3rem) var(--fonte-texto); text-shadow: 0 2px 8px #000; pointer-events: none; }
+
+.controles { display: flex; flex-direction: column; gap: 16px; }
+.botoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.botao {
+  font: inherit; font-weight: 600; cursor: pointer;
+  padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--borda); background: var(--superficie); color: var(--texto);
+}
+.botao:hover:not(:disabled) { border-color: var(--destaque); }
+.botao.principal { background: var(--destaque); color: var(--destaque-texto); border-color: var(--destaque); }
+.botao:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.campo { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; }
+.campo legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+.campo label, .campo.linha { flex-direction: row; align-items: center; gap: 8px; display: flex; }
+.campo small { color: var(--texto-suave); }
+.campo input[type="text"], .campo input[type="number"] {
+  font: inherit; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--borda); background: var(--superficie); color: var(--texto); max-width: 260px;
+}
+.campo input[type="range"] { width: 100%; accent-color: var(--destaque); }
+
+.status { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--superficie-2); font-size: 0.95rem; }
+.status.erro { background: color-mix(in srgb, var(--vermelho) 15%, var(--superficie)); color: var(--vermelho); }
+.leitura { display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums; }
+.aviso { color: var(--texto-suave); font-size: 0.92rem; }
+
+/* Painel "Ver o que a rede vê" */
+.visao-rede { margin-top: 24px; padding: 20px; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); box-shadow: var(--sombra); }
+.visao-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.visao-topo h2 { margin: 0; font-size: 1.25rem; }
+.etapas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin: 16px 0; }
+.etapas figure { margin: 0; text-align: center; }
+.etapas img { width: 100%; aspect-ratio: 1; object-fit: cover; image-rendering: pixelated; border-radius: 6px; border: 1px solid var(--borda); }
+.etapas figcaption { font-size: 0.85rem; color: var(--texto-suave); }
+
+/* Barras de probabilidade */
+.barras { display: flex; flex-direction: column; gap: 6px; }
+.barra { display: grid; grid-template-columns: minmax(80px, 160px) 1fr 52px; gap: 10px; align-items: center; font-variant-numeric: tabular-nums; }
+.barra-fundo { height: 14px; background: var(--superficie-2); border-radius: 7px; overflow: hidden; }
+.barra-cheia { height: 100%; background: var(--destaque); border-radius: 7px; }
+.barra.vencedora .barra-cheia { background: var(--verde); }
+
+/* Coleta de fotos */
+.coleta { margin-top: 24px; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); }
+.coleta summary { cursor: pointer; padding: 14px 18px; font-weight: 600; }
+.coleta-grade { display: grid; grid-template-columns: 1fr minmax(0, 360px); gap: 20px; padding: 0 18px 18px; }
+.coleta-grade > div:first-child { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+/* ---------- Celular e telas estreitas ---------- */
+@media (max-width: 800px) {
+  .app-grade, .coleta-grade { grid-template-columns: 1fr; }
+}
