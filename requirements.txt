@@ -2,5 +2,4 @@ tensorflow>=2.16,<2.21
 numpy>=1.26,<3
 pillow>=10
 matplotlib>=3.8
-flask>=3.0
 pytest>=8

@@ -2,7 +2,7 @@
 
 Uma Rede Neural Convolucional (CNN) treinada **do zero** que reconhece os integrantes do grupo pelo rosto.
 O repositório tem o pipeline completo em Python (pré-processamento, divisão, aumento de dados, CNN, treino,
-métricas e imagens intermediárias) e um **site local** com:
+métricas e imagens intermediárias) e um **site local**, servido por Node.js, com:
 
 - **no topo:** o reconhecimento **ao vivo pela webcam**, usando o modelo treinado;
 - **logo abaixo:** a **documentação** passo a passo, com o código real de cada etapa, as imagens
@@ -11,22 +11,35 @@ métricas e imagens intermediárias) e um **site local** com:
 O notebook original do Google Colab está em [`notebooks/reconhecimento_facial_cnn.ipynb`](notebooks/reconhecimento_facial_cnn.ipynb)
 e é a referência do pipeline: mesma lógica, mesmos parâmetros e mesmos nomes de funções.
 
+## Como as partes se conversam
+
+```
+navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/stdout, JSON por linha-->  src/servico.py (Python + CNN)
+```
+
+- O **Node** cuida de todo o HTTP: entrega o site, salva as fotos da coleta, lê os resultados e o código da documentação.
+- O **Python** cuida só da rede neural. Ele não é um servidor web: o Node abre **um** processo `python -m src.servico`,
+  que carrega o modelo uma vez e responde a cada pedido com uma linha de JSON. Assim o reconhecimento ao vivo usa
+  exatamente o mesmo `preprocessar` do treino.
+
 ## Estrutura
 
 ```
-├── app.py                  servidor Flask: entrega o site e as rotas da API
+├── servidor.js             servidor Node (Express): site, rotas da API e ponte com o Python
+├── package.json            dependência do Node (express)
 ├── dataset/<nome>/         fotos de cada integrante (o nome da pasta é o rótulo)
 ├── modelo/                 gerado pelo treino: modelo_cnn.keras, classes.json, resultados.json
 ├── src/
 │   ├── config.py           todos os parâmetros (IMG_SIZE, EPOCAS, BATCH, SEED, LIMIAR...)
-│   ├── dados.py            ler_imagem (com correção EXIF), listar_dataset, salvar_fotos
+│   ├── dados.py            ler_imagem (com correção EXIF), listar_dataset, imagem_de_dataurl
 │   ├── preprocessamento.py recorte_central, para_cinza, redimensionar, equalizar_histograma, preprocessar
 │   ├── divisao.py          treino/validação/teste por blocos de fotos seguidas
 │   ├── aumento.py          aumentar (espelho, deslocamento, contraste, brilho, ruído)
 │   ├── modelo.py           construir_cnn
 │   ├── metricas.py         matriz de confusão, VP/FP/FN/VN, precisão, recall, F1, especificidade, acurácia
 │   ├── visualizacoes.py    imagens intermediárias em PNG
-│   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam (usado pelo servidor)
+│   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam
+│   ├── servico.py          processo Python aberto pelo servidor.js: recebe pedidos e roda a CNN
 │   └── treinar.py          executa o pipeline completo
 ├── web/                    site: index.html, css/, js/, img/resultados/ (PNGs gerados pelo treino)
 ├── tests/                  testes com pytest
@@ -37,7 +50,10 @@ e é a referência do pipeline: mesma lógica, mesmos parâmetros e mesmos nomes
 
 ### 1. Pré-requisitos e ambiente virtual
 
-Python **3.10 a 3.13** (testado com Python 3.13 e TensorFlow 2.20). Na pasta do repositório:
+- Python **3.10 a 3.13** (testado com Python 3.13 e TensorFlow 2.20);
+- Node.js **18 ou mais novo** (testado com Node 22).
+
+Na pasta do repositório, crie o ambiente virtual do Python:
 
 ```bash
 python -m venv .venv
@@ -51,14 +67,18 @@ source .venv/bin/activate
 ### 2. Instalar as dependências
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt   # Python: TensorFlow, NumPy, Pillow, matplotlib, pytest
+npm install                       # Node: Express
 ```
+
+O servidor Node usa sozinho o Python do `.venv` (onde está o TensorFlow). Se o ambiente estiver em outro lugar,
+indique o caminho do Python na variável de ambiente `PYTHON`.
 
 ### 3. Coletar as fotos
 
 Cada integrante precisa de uma pasta `dataset/<nome>/` com as fotos dele. Há duas formas:
 
-- **Pelo site:** rode `python app.py`, abra `http://localhost:5000` e use a seção
+- **Pelo site:** rode `npm start`, abra `http://localhost:5000` e use a seção
   **“Coletar fotos de um integrante para o dataset”**. Digite o nome, clique em “Iniciar captura”: depois de
   uma contagem de 3 s, a página tira N fotos (padrão 80, uma a cada 250 ms) e salva em `dataset/<nome>/`,
   continuando a numeração.
@@ -89,15 +109,16 @@ seguidas) → aumento de dados → montagem da CNN → treino (até 60 épocas, 
 | `modelo/resultados.json` | métricas, matriz de confusão, histórico do treino, divisão dos dados e camadas |
 | `web/img/resultados/*.png` | fotos originais, etapas do pré-processamento, aumento, curvas, matriz, métricas, erros, mapas de características e Grad-CAM |
 
-Sempre que coletarem fotos novas, rodem o treino de novo. O servidor percebe o modelo novo sozinho.
+Sempre que coletarem fotos novas, rodem o treino de novo. O servidor percebe o modelo novo sozinho (não precisa reiniciar).
 
 ### 5. Abrir o site
 
 ```bash
-python app.py
+npm start
 ```
 
-Abra **http://localhost:5000**. Clique em “Ligar webcam” e permita o acesso à câmera.
+O terminal mostra `Site em http://localhost:5000` e, alguns segundos depois, `Python pronto para receber pedidos.`
+(é o tempo de carregar o TensorFlow). Abra **http://localhost:5000**. Clique em “Ligar webcam” e permita o acesso à câmera.
 O navegador só libera a webcam em `localhost` ou em HTTPS, por isso o servidor escuta apenas em `127.0.0.1`.
 
 - **1 pessoa:** a caixa é o quadrado central, o mesmo recorte das fotos de treino (é quando a rede funciona melhor).
@@ -129,7 +150,7 @@ camadas de aumento de dados do Keras ou scikit-learn.
 | Montar e treinar a CNN | TensorFlow/Keras, **sem modelo pré-treinado** |
 | Matriz de confusão e métricas | **código próprio com NumPy** |
 | Gráficos e imagens intermediárias | `matplotlib` |
-| Servidor local | `Flask` |
+| Servidor local | Node.js com `Express` (a rede roda num processo Python aberto por ele) |
 | Site e captura da webcam | HTML, CSS e JavaScript puros (`navigator.mediaDevices.getUserMedia`) |
 
 ## Privacidade

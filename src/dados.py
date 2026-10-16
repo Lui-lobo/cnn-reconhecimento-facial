@@ -1,8 +1,7 @@
-# Leitura e gravação das fotos do dataset.
-# O PIL é usado SOMENTE para abrir e salvar arquivos de imagem; o resto é NumPy.
+# Leitura das fotos do dataset (a gravação das fotos coletadas no site é feita pelo servidor Node).
+# O PIL é usado SOMENTE para abrir arquivos de imagem; o resto é NumPy.
 import os
 import io
-import re
 import base64
 import numpy as np
 from PIL import Image
@@ -44,17 +43,3 @@ def imagem_de_dataurl(texto):
     bytes_img = base64.b64decode(texto.split(",")[1])            # tira o cabeçalho "data:image/jpeg;base64,"
     return np.array(Image.open(io.BytesIO(bytes_img)).convert("RGB"))
 
-
-def nome_valido(nome):
-    # Aceita só letras minúsculas sem acento, números, "_" e "-" (evita criar pastas fora do dataset)
-    return re.fullmatch(r"[a-z0-9][a-z0-9_-]*", nome) is not None
-
-
-def salvar_fotos(nome, imagens, pasta=DATASET_DIR):
-    # Salva as fotos de um integrante em dataset/<nome>/, continuando a numeração já existente
-    destino = os.path.join(pasta, nome)
-    os.makedirs(destino, exist_ok=True)
-    ja_existem = len([a for a in os.listdir(destino) if a.lower().endswith(EXTENSOES)])
-    for i, img in enumerate(imagens):
-        Image.fromarray(img).save(os.path.join(destino, f"{nome}_{ja_existem + i:04d}.jpg"), quality=95)
-    return destino

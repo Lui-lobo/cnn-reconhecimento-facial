@@ -138,7 +138,9 @@
             <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
             <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
             <tr><td>Gráficos e imagens intermediárias</td><td><code>matplotlib</code></td></tr>
-            <tr><td>Servidor local e site</td><td><code>Flask</code> + HTML, CSS e JavaScript puros</td></tr>
+            <tr><td>Servidor local (HTTP, fotos, resultados)</td><td>Node.js com <code>Express</code></td></tr>
+            <tr><td>Rede neural ao vivo</td><td>processo Python (<code>src/servico.py</code>) aberto pelo Node, sem servidor web</td></tr>
+            <tr><td>Site</td><td>HTML, CSS e JavaScript puros</td></tr>
           </tbody>
         </table></div>
 
@@ -155,7 +157,7 @@
         </ol>
         <p>Tudo isso roda com um comando, <code>python -m src.treinar</code>, que salva o modelo em
           <code>modelo/</code> e as imagens desta página em <code>web/img/resultados/</code>.
-          O servidor (<code>python app.py</code>) usa o modelo salvo para o reconhecimento ao vivo.</p>
+          O servidor Node (<code>npm start</code>) entrega o site e abre um processo Python que usa o modelo salvo no reconhecimento ao vivo.</p>
       </article>
 
       <!-- 2. Coleta das fotos -->
@@ -177,7 +179,7 @@
           <li>Usem quantidades parecidas de fotos por pessoa (algo entre 150 e 300).</li>
         </ul>
         <pre class="codigo" data-js="coleta.js#coletarFotos"></pre>
-        <pre class="codigo" data-codigo="dados/salvar_fotos"></pre>
+        <pre class="codigo" data-codigo="servidor/salvarFotos"></pre>
         <figure class="figura">
           <img data-resultado="fotos_originais" alt="Seis fotos originais de cada integrante">
           <figcaption>Fotos originais de cada integrante, sem nenhum tratamento.</figcaption>
@@ -447,15 +449,30 @@
       <!-- 11. Reconhecimento ao vivo -->
       <article id="ao-vivo" class="secao">
         <h2><span class="numero">11</span> Reconhecimento ao vivo</h2>
-        <p>A rede roda no servidor Python; o navegador cuida da câmera e do desenho. A cada ciclo (cerca de 4 por segundo):</p>
+        <p>Três partes trabalham juntas: o <strong>navegador</strong> cuida da câmera e do desenho, o
+          <strong>servidor Node</strong> cuida do HTTP e o <strong>Python</strong> cuida só da rede neural.
+          A cada ciclo (cerca de 4 por segundo):</p>
         <ol class="ciclo">
           <li><span class="lado navegador">Navegador</span> captura o quadro atual do vídeo e envia como JPEG para <code>POST /api/reconhecer</code>.</li>
-          <li><span class="lado servidor">Servidor</span> recorta as regiões fixas da tela com <code>regioes_da_tela</code>.</li>
-          <li><span class="lado servidor">Servidor</span> aplica o <strong>mesmo</strong> <code>preprocessar</code> do treino e passa as regiões pela CNN de uma vez.</li>
-          <li><span class="lado servidor">Servidor</span> devolve a posição de cada caixa e as probabilidades de cada integrante.</li>
+          <li><span class="lado servidor">Node</span> recebe o pedido e o repassa ao processo Python como uma linha de JSON no stdin.</li>
+          <li><span class="lado python">Python</span> recorta as regiões fixas da tela com <code>regioes_da_tela</code>.</li>
+          <li><span class="lado python">Python</span> aplica o <strong>mesmo</strong> <code>preprocessar</code> do treino e passa as regiões pela CNN de uma vez.</li>
+          <li><span class="lado python">Python</span> escreve no stdout a posição de cada caixa e as probabilidades de cada integrante.</li>
+          <li><span class="lado servidor">Node</span> devolve essa resposta ao navegador.</li>
           <li><span class="lado navegador">Navegador</span> faz a média dos últimos 5 quadros, decide o nome com o limiar e desenha as caixas no <code>&lt;canvas&gt;</code>.</li>
           <li><span class="lado navegador">Navegador</span> só envia o próximo quadro depois que a resposta chega (as requisições nunca se acumulam).</li>
         </ol>
+
+        <h3>Como o Node conversa com o Python</h3>
+        <p>O Python não é um servidor web. Quando o Node inicia, ele abre <strong>um</strong> processo
+          <code>python -m src.servico</code>, que carrega o modelo uma única vez e fica esperando pedidos. Cada pedido é
+          uma linha de JSON com um número (<code>id</code>); a resposta volta em outra linha com o mesmo número, e é assim
+          que o Node sabe a qual pedido ela pertence. Se o modelo for retreinado, o Python percebe que o arquivo mudou e o
+          carrega de novo; se o processo Python cair, o Node o abre de novo no próximo pedido.</p>
+        <pre class="codigo" data-codigo="servidor/pedirAoPython"></pre>
+        <pre class="codigo recolhido" data-codigo="servidor/iniciarPython"></pre>
+        <pre class="codigo" data-codigo="servico/main"></pre>
+        <pre class="codigo recolhido" data-codigo="servico/atender"></pre>
 
         <h3>Por que as caixas são fixas</h3>
         <p>O trabalho não permite usar um detector de rosto pronto, então a rede não sabe <em>onde</em> há rostos na
@@ -531,12 +548,14 @@
           <dd>O rosto precisa estar dentro da caixa (no centro, com 1 pessoa). Além disso, o softmax sempre escolhe alguém; por isso usamos o limiar de 60% para “desconhecido”.</dd>
           <dt>Por que a rede roda no servidor e não no navegador?</dt>
           <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
+          <dt>Por que um servidor Node e um processo Python?</dt>
+          <dd>Cada um faz o que faz melhor: o Node cuida do HTTP (site, rotas, gravação das fotos) e o Python cuida só da rede neural. Eles conversam pelo stdin/stdout, uma linha de JSON por pedido; o Python fica aberto o tempo todo, então o modelo é carregado uma vez só.</dd>
           <dt>Por que a média de 5 quadros?</dt>
           <dd>Para o nome não “piscar” quando um quadro isolado sai diferente. Com ~4 quadros por segundo, a média cobre pouco mais de 1 segundo.</dd>
           <dt>O vídeo espelhado não atrapalha a rede?</dt>
           <dd>Não: o espelhamento é só visual (CSS). O quadro enviado ao servidor é o original, como as fotos de treino; apenas a posição das caixas é espelhada no desenho.</dd>
           <dt>O código desta página pode estar desatualizado?</dt>
-          <dd>Não: os blocos de código são lidos do próprio arquivo Python pela rota <code>/api/codigo</code> (com <code>inspect.getsource</code>), e as métricas vêm do <code>resultados.json</code> gerado no último treino.</dd>
+          <dd>Não: os blocos de código são lidos do próprio arquivo Python pela rota <code>/api/codigo</code> (o servidor recorta a função direto do arquivo <code>.py</code> ou <code>.js</code>), e as métricas vêm do <code>resultados.json</code> gerado no último treino.</dd>
         </dl>
       </article>
     </div>
@@ -545,7 +564,7 @@
 </main>
 
 <footer class="rodape">
-  <div class="largura">CNN treinada do zero com TensorFlow/Keras · tratamento das imagens e métricas com NumPy · site em HTML, CSS e JavaScript puros.</div>
+  <div class="largura">CNN treinada do zero com TensorFlow/Keras · tratamento das imagens e métricas com NumPy · servidor Node.js · site em HTML, CSS e JavaScript puros.</div>
 </footer>
 
 <script src="js/ao_vivo.js"></script>

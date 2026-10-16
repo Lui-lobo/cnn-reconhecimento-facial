@@ -1,0 +1,16 @@
+{
+  "name": "cnn-reconhecimento-facial",
+  "version": "1.0.0",
+  "description": "Servidor local do site de reconhecimento facial com CNN (a rede neural roda em Python)",
+  "private": true,
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "4.22.3"
+  }
+}

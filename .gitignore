@@ -17,3 +17,6 @@ Thumbs.db
 .vscode/
 .idea/
 .ipynb_checkpoints/
+
+# Dependências do Node (instaladas com npm install)
+node_modules/

@@ -41,16 +41,15 @@ function mostrarCodigo(pre, titulo, codigo, marcador) {
 }
 
 async function carregarCodigoPython(pre) {
-  // Busca no servidor o código-fonte atual de uma função de src/
+  // Busca no servidor o código-fonte atual de uma função de src/ (Python) ou do servidor.js
   const [modulo, funcao] = pre.dataset.codigo.split("/");
-  const titulo = `src/${modulo}.py · ${funcao}()`;
   try {
     const resposta = await fetch(`/api/codigo/${modulo}/${funcao}`);
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.erro);
-    mostrarCodigo(pre, titulo, dados.codigo, "#");
+    mostrarCodigo(pre, `${dados.arquivo} · ${funcao}()`, dados.codigo, dados.arquivo.endsWith(".py") ? "#" : "//");
   } catch (erro) {
-    mostrarCodigo(pre, titulo, `# Não foi possível carregar o código (${erro.message}).`, "#");
+    mostrarCodigo(pre, `${modulo} · ${funcao}()`, `Não foi possível carregar o código (${erro.message}).`, "#");
   }
 }
 
