@@ -10,8 +10,9 @@ from tensorflow import keras
 from src.config import IMAGENS_DIR
 from src.dados import ler_imagem
 from src.preprocessamento import preprocessar
-from src.aumento import aumentar
+from src.aumento import aumentar, variar_cena
 from src.reconhecimento import criar_modelo_gradcam, grad_cam
+from src.robustez import trocar_fundo
 
 
 def salvar(nome):
@@ -38,9 +39,9 @@ def fotos_originais(classes, caminhos, rotulos):
 
 
 def etapas_preprocessamento(classes, caminhos, rotulos):
-    # As 5 etapas do pré-processamento para a primeira foto de cada integrante, com o histograma antes/depois
-    titulos = ["original", "1. recorte", "2. cinza", "3. 96x96", "4. equalizada"]
-    fig, eixos = plt.subplots(len(classes), 6, figsize=(17, 3 * len(classes)), squeeze=False)
+    # As etapas do pré-processamento para a primeira foto de cada integrante, com o histograma antes/depois
+    titulos = ["original", "1. recorte", "2. cinza", "3. 96x96", "4. equalizada", "5. máscara oval"]
+    fig, eixos = plt.subplots(len(classes), 7, figsize=(19, 3 * len(classes)), squeeze=False)
     for numero, nome in enumerate(classes):
         primeira_foto = caminhos[list(rotulos).index(numero)]
         _, etapas = preprocessar(ler_imagem(primeira_foto), mostrar_etapas=True)
@@ -49,23 +50,24 @@ def etapas_preprocessamento(classes, caminhos, rotulos):
             ax.set_title(f"{nome}: {titulo}\n{img.shape[1]}x{img.shape[0]}", fontsize=9)
             ax.axis("off")
         # Histograma: quantos pixels há de cada tom antes e depois da equalização
-        eixos[numero, 5].hist(etapas[3].ravel(), bins=50, alpha=0.6, label="antes")
-        eixos[numero, 5].hist(etapas[4].ravel(), bins=50, alpha=0.6, label="equalizada")
-        eixos[numero, 5].set_title("histograma dos tons", fontsize=9)
-        eixos[numero, 5].legend(fontsize=8)
+        eixos[numero, 6].hist(etapas[3].ravel(), bins=50, alpha=0.6, label="antes")
+        eixos[numero, 6].hist(etapas[4].ravel(), bins=50, alpha=0.6, label="equalizada")
+        eixos[numero, 6].set_title("histograma dos tons", fontsize=9)
+        eixos[numero, 6].legend(fontsize=8)
     plt.tight_layout()
     salvar("preprocessamento")
 
 
-def exemplos_aumento(classes, X_treino, y_treino):
-    # A mesma foto de treino modificada 6 vezes pelo aumento de dados
+def exemplos_aumento(classes, X_treino, X_distancia, y_treino, indice_ninguem):
+    # A mesma foto de treino modificada 6 vezes pelo aumento de dados (distância, troca de entorno e aumentar)
     fig, eixos = plt.subplots(len(classes), 7, figsize=(13, 2 * len(classes)), squeeze=False)
     for linha in range(len(classes)):
-        original = X_treino[y_treino == linha][0]
-        eixos[linha, 0].imshow(original[:, :, 0], cmap="gray", vmin=0, vmax=1)
+        i = np.where(y_treino == linha)[0][0]
+        eixos[linha, 0].imshow(X_treino[i][:, :, 0], cmap="gray", vmin=0, vmax=1)
         eixos[linha, 0].set_title(f"{classes[linha]} (original)", fontsize=9)
         for coluna in range(1, 7):
-            eixos[linha, coluna].imshow(aumentar(original)[:, :, 0], cmap="gray", vmin=0, vmax=1)
+            copia = aumentar(variar_cena(i, X_treino, X_distancia, y_treino, indice_ninguem))
+            eixos[linha, coluna].imshow(copia[:, :, 0], cmap="gray", vmin=0, vmax=1)
             eixos[linha, coluna].set_title(f"aumentada {coluna}", fontsize=9)
     for ax in eixos.ravel():
         ax.axis("off")
@@ -179,3 +181,28 @@ def gradcam_por_integrante(model, X_teste, y_teste, classes):
         ax.axis("off")
     plt.tight_layout()
     salvar("gradcam")
+
+
+def grafico_troca_de_fundo(troca, X_teste, y_teste, classes):
+    # Um exemplo da troca (rosto de um integrante + entorno de outro) e, ao lado, o resultado do teste
+    rosto, entorno = X_teste[y_teste == 0][0], X_teste[y_teste == 1][0]
+    fig, eixos = plt.subplots(1, 4, figsize=(14, 3.4), gridspec_kw={"width_ratios": [1, 1, 1, 2.6]})
+    imagens = [rosto, entorno, trocar_fundo(rosto, entorno)]
+    titulos = [f"rosto: {classes[0]}", f"entorno: {classes[1]}", "imagem montada"]
+    for ax, img, titulo in zip(eixos[:3], imagens, titulos):
+        ax.imshow(img[:, :, 0], cmap="gray", vmin=0, vmax=1)
+        ax.set_title(titulo, fontsize=10)
+        ax.axis("off")
+
+    nomes = ["imagem montada:\nresponde o dono do ROSTO", "imagem montada:\nresponde o dono do ENTORNO",
+             "foto vazia:\nresponde “ninguém”"]
+    valores = [troca["segue_o_rosto"], troca["segue_o_entorno"], troca["vazio_e_ninguem"]]
+    barras = eixos[3].barh(nomes, valores, height=0.5, color="#4878a8")
+    eixos[3].bar_label(barras, labels=[f"{v:.0%}" for v in valores], padding=4)
+    eixos[3].set_xlim(0, 1.12)
+    eixos[3].invert_yaxis()                                  # a primeira barra fica em cima
+    eixos[3].xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+    eixos[3].spines[["top", "right"]].set_visible(False)
+    eixos[3].set_title("fotos de teste (o ideal: 1ª e 3ª barras altas, 2ª baixa)", fontsize=10)
+    plt.tight_layout()
+    salvar("troca_de_fundo")

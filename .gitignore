@@ -20,3 +20,13 @@ Thumbs.db
 
 # Dependências do Node (instaladas com npm install)
 node_modules/
+
+# Fotos dos integrantes: são dados pessoais e ficam só na máquina de quem coletou
+dataset/*
+!dataset/.gitkeep
+
+# Gerados pelo treino (python -m src.treinar): o modelo e as imagens mostram os rostos do grupo
+modelo/*
+!modelo/.gitkeep
+web/img/resultados/*
+!web/img/resultados/.gitkeep

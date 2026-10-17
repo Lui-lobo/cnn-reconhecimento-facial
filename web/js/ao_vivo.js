@@ -90,7 +90,7 @@ async function ligarWebcam() {
   botaoVerRede.disabled = false;
   ligado = true;
   historico = [];
-  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro da caixa.");
+  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
   loopReconhecimento();
 }
 
@@ -140,7 +140,8 @@ function mediaDosUltimos(i, probabilidades) {
 }
 
 function desenharCaixas(resposta) {
-  // Desenha cada caixa com o nome e a confiança: verde se reconhecido, vermelho ("desconhecido") se abaixo do limiar
+  // Desenha o oval-guia de cada caixa com o nome e a confiança: verde se reconhecido, vermelho ("desconhecido") se
+  // abaixo do limiar e cinza se a classe vencedora for "ninguem" (caixa vazia)
   if (historico.length > resposta.caixas.length) historico = [];   // mudou de 2 para 1 pessoa: recomeça a média
   ctx.clearRect(0, 0, tela.width, tela.height);
   const tamanhoFonte = Math.round(tela.width / 28);
@@ -152,14 +153,17 @@ function desenharCaixas(resposta) {
     const media = mediaDosUltimos(i, caixa.probabilidades);
     const melhor = media.indexOf(Math.max(...media));
     const reconhecido = media[melhor] >= limiar.value / 100;
-    const texto = reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
-    const cor = reconhecido ? "#2ca02c" : "#d62728";
+    const vazio = resposta.classes[melhor] === "ninguem";
+    const texto = vazio ? "ninguém" : reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
+    const cor = vazio ? "#6b7280" : reconhecido ? "#2ca02c" : "#d62728";
 
     // Se o vídeo está espelhado, espelhamos só a POSIÇÃO x da caixa; o texto continua desenhado normalmente
     const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x;
 
     ctx.strokeStyle = cor;
-    ctx.strokeRect(x, caixa.y, caixa.lado, caixa.lado);                              // contorno da caixa
+    ctx.beginPath();                                                                 // oval-guia: o mesmo da máscara
+    ctx.ellipse(x + caixa.lado / 2, caixa.y + caixa.lado / 2, 0.40 * caixa.lado, 0.48 * caixa.lado, 0, 0, 2 * Math.PI);
+    ctx.stroke();
     ctx.fillStyle = cor;
     ctx.fillRect(x, caixa.y, ctx.measureText(texto).width + 16, tamanhoFonte * 1.5);  // fundo do texto
     ctx.fillStyle = "#ffffff";
@@ -167,7 +171,7 @@ function desenharCaixas(resposta) {
     leitura.push(`Caixa ${i + 1}: ${texto}`);
   });
   document.getElementById("leitura-ao-vivo").textContent = leitura.join(" · ");
-  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro da caixa.");
+  mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
 }
 
 // ---------- Botão "Ver o que a rede vê" ----------
@@ -182,7 +186,7 @@ async function verOQueARedeVe() {
   painel.hidden = false;
   try {
     const r = await enviarJSON("/api/etapas", { imagem: capturarQuadro(video, 0.9) });
-    const titulos = ["1. recorte central", "2. tons de cinza", "3. 96×96", "4. equalizada", "5. entrada da CNN (0–1)"];
+    const titulos = ["1. recorte do rosto", "2. tons de cinza", "3. 96×96", "4. equalizada", "5. máscara oval (entrada da CNN)"];
     etapas.innerHTML = "";
     r.etapas.concat([r.gradcam]).forEach((src, i) => {
       const figura = document.createElement("figure");

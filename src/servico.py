@@ -42,15 +42,15 @@ def png_base64(matriz):
 
 
 def reconhecer(m, pedido):
-    # Reconhecimento ao vivo: recorta 1 ou 2 regiões fixas do quadro e devolve as probabilidades de cada uma
+    # Reconhecimento ao vivo: recorta o rosto de 1 ou 2 faixas fixas do quadro e devolve as probabilidades de cada uma
     quadro = imagem_de_dataurl(pedido["imagem"])
     return {"caixas": reconhecer_quadro(m["model"], quadro, pedido["n_pessoas"]), "classes": m["classes"]}
 
 
 def etapas(m, pedido):
-    # Botão "Ver o que a rede vê": as 5 etapas do pré-processamento, o Grad-CAM e a previsão
+    # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM e a previsão
     quadro = imagem_de_dataurl(pedido["imagem"])
-    entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [original, 1, 2, 3, 4]
+    entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [original, 1, 2, 3, 4, 5]
     probs = m["model"](entrada[np.newaxis], training=False).numpy()[0]
 
     # Grad-CAM: mapa de calor colorido (escala "jet") misturado com a imagem de entrada em cinza

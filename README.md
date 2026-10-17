@@ -32,13 +32,15 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 ├── src/
 │   ├── config.py           todos os parâmetros (IMG_SIZE, EPOCAS, BATCH, SEED, LIMIAR...)
 │   ├── dados.py            ler_imagem (com correção EXIF), listar_dataset, imagem_de_dataurl
-│   ├── preprocessamento.py recorte_central, para_cinza, redimensionar, equalizar_histograma, preprocessar
+│   ├── preprocessamento.py recorte_rosto, para_cinza, redimensionar, equalizar_histograma, mascara_oval, preprocessar
 │   ├── divisao.py          treino/validação/teste por blocos de fotos seguidas
-│   ├── aumento.py          aumentar (espelho, deslocamento, contraste, brilho, ruído)
+│   ├── ninguem.py          classe "ninguém": recortes de fundo usados como exemplos de câmera vazia
+│   ├── aumento.py          aumentar (espelho, deslocamento, máscara encolhida, contraste, brilho, ruído)
 │   ├── modelo.py           construir_cnn
 │   ├── metricas.py         matriz de confusão, VP/FP/FN/VN, precisão, recall, F1, especificidade, acurácia
 │   ├── visualizacoes.py    imagens intermediárias em PNG
 │   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam
+│   ├── robustez.py         teste de troca de fundo (a rede segue o rosto ou o cenário?)
 │   ├── servico.py          processo Python aberto pelo servidor.js: recebe pedidos e roda a CNN
 │   └── treinar.py          executa o pipeline completo
 ├── web/                    site: index.html, css/, js/, img/resultados/ (PNGs gerados pelo treino)
@@ -82,13 +84,17 @@ Cada integrante precisa de uma pasta `dataset/<nome>/` com as fotos dele. Há du
   (ela abre sozinha enquanto não houver modelo treinado). Digite o nome (ou clique em um nome já cadastrado),
   clique em “Iniciar captura”: depois de uma contagem de 3 s, a página tira N fotos (padrão 80, uma a cada 250 ms)
   e salva em `dataset/<nome>/`, continuando a numeração.
-- **Copiando arquivos:** coloque fotos `.jpg`, `.jpeg` ou `.png` em `dataset/<nome>/`. Os arquivos são lidos em
+- **Copiando arquivos:** coloque fotos `.jpg`, `.jpeg`, `.png` ou `.heic` (iPhone) em `dataset/<nome>/`. Os arquivos são lidos em
   ordem alfabética, que deve ser a ordem em que foram tirados (ex.: `ana_0000.jpg`, `ana_0001.jpg`...).
 
 Dicas para a rede aprender o rosto, e não o fundo:
 
 - façam **3 ou mais sessões** por pessoa, em **lugares e iluminações diferentes**;
-- mantenham o rosto centralizado e mexam levemente a cabeça durante a captura;
+- fotografem **todos nos mesmos lugares**: se cada pessoa tiver um cenário só dela, o cenário vira uma pista mais fácil que o rosto;
+- mantenham o rosto dentro do oval e mexam levemente a cabeça durante a captura;
+- (opcional, mas ajuda muito) coletem fotos com o nome **`ninguem`**, com a câmera apontada para os lugares vazios
+  (cadeira, parede). Elas viram a classe “ninguém”, que a rede responde quando não há pessoa no oval. Mesmo sem
+  essa pasta, o treino cria exemplos de “ninguém” a partir do fundo das fotos dos integrantes;
 - juntem **cerca de 150 a 300 fotos por pessoa**, em **quantidades parecidas** entre as pessoas;
 - nomes de pasta só com letras minúsculas sem acento, números, `_` ou `-` (pastas que começam com `.` ou `_` são ignoradas).
 
@@ -106,16 +112,16 @@ coleta”** no passo 1, o treino começa sozinho quando as fotos são salvas. Se
 python -m src.treinar
 ```
 
-O script faz, na ordem: leitura → pré-processamento → divisão em treino/validação/teste (por blocos de fotos
-seguidas) → aumento de dados → montagem da CNN → treino (até 60 épocas, com EarlyStopping) → avaliação no teste
-→ imagens intermediárias. No fim, imprime as métricas no terminal e salva:
+O script faz, na ordem: leitura → pré-processamento (recorte do rosto e máscara oval) → divisão em
+treino/validação/teste (por blocos de fotos seguidas) + exemplos de “ninguém” → aumento de dados → montagem da CNN
+→ treino (até 60 épocas, com EarlyStopping) → avaliação no teste e teste de troca de fundo → imagens intermediárias. No fim, imprime as métricas no terminal e salva:
 
 | Arquivo | Conteúdo |
 |---|---|
 | `modelo/modelo_cnn.keras` | a rede treinada |
 | `modelo/classes.json` | os nomes dos integrantes, na ordem dos rótulos |
 | `modelo/resultados.json` | métricas, matriz de confusão, histórico do treino, divisão dos dados e camadas |
-| `web/img/resultados/*.png` | fotos originais, etapas do pré-processamento, aumento, curvas, matriz, métricas, erros, mapas de características e Grad-CAM |
+| `web/img/resultados/*.png` | fotos originais, etapas do pré-processamento, aumento, curvas, matriz, métricas, erros, mapas de características, Grad-CAM e teste de troca de fundo |
 
 Sempre que coletarem fotos novas, rodem o treino de novo. O servidor percebe o modelo novo sozinho (não precisa reiniciar).
 
@@ -129,10 +135,11 @@ O terminal mostra `Site em http://localhost:5000` e, alguns segundos depois, `Py
 (é o tempo de carregar o TensorFlow). Abra **http://localhost:5000**. Clique em “Ligar webcam” e permita o acesso à câmera.
 O navegador só libera a webcam em `localhost` ou em HTTPS, por isso o servidor escuta apenas em `127.0.0.1`.
 
-- **1 pessoa:** a caixa é o quadrado central, o mesmo recorte das fotos de treino (é quando a rede funciona melhor).
-- **2 pessoas:** a tela é dividida em duas caixas lado a lado; cada pessoa fica dentro de uma.
-- **Limiar:** abaixo dele (padrão 60%), a caixa fica vermelha com “desconhecido”.
-- **Ver o que a rede vê:** congela o quadro e mostra as 5 etapas do pré-processamento, o Grad-CAM e as probabilidades.
+- **1 pessoa:** o oval central é o mesmo recorte e a mesma máscara das fotos de treino (é quando a rede funciona melhor).
+- **2 pessoas:** a tela é dividida em duas faixas lado a lado, cada uma com o seu oval; cada pessoa fica dentro de um.
+- **Ninguém:** se a rede achar que o oval está vazio, ele fica cinza com “ninguém”.
+- **Limiar:** abaixo dele (padrão 60%), o oval fica vermelho com “desconhecido”.
+- **Ver o que a rede vê:** congela o quadro e mostra as etapas do pré-processamento, o Grad-CAM e as probabilidades.
 
 Se o modelo ainda não foi treinado, o site avisa para rodar `python -m src.treinar` primeiro.
 
@@ -153,7 +160,7 @@ camadas de aumento de dados do Keras ou scikit-learn.
 
 | Etapa | Ferramenta |
 |---|---|
-| Abrir e salvar o arquivo .jpg/.png | `PIL` (só transforma o arquivo em uma matriz de números) |
+| Abrir e salvar o arquivo .jpg/.png/.heic | `PIL` + `pillow-heif` para .heic (só transforma o arquivo em uma matriz de números) |
 | Recorte, tons de cinza, redimensionamento, equalização, aumento de dados, divisão dos dados | **código próprio com NumPy** |
 | Montar e treinar a CNN | TensorFlow/Keras, **sem modelo pré-treinado** |
 | Matriz de confusão e métricas | **código próprio com NumPy** |

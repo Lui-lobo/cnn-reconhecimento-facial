@@ -167,7 +167,7 @@ function preencherResultados(r) {
 
   // Visão geral
   document.getElementById("resumo-geral").innerHTML = blocosDeNumeros([
-    [r.classes.length, "integrantes"],
+    [r.classes.filter((nome) => nome !== "ninguem").length, "integrantes"],   // "ninguem" é a classe do fundo vazio
     [numero(r.totais.fotos), "fotos no dataset"],
     [porcento(r.acuracias.teste), "acurácia no teste"],
     [numero(r.parametros_total), "parâmetros na rede"],

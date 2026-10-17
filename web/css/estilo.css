@@ -133,7 +133,7 @@ code { font-family: var(--fonte-codigo); font-size: 0.9em; background: var(--cod
 .passo { border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .passo h3 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
 .passo-final { display: flex; align-items: center; gap: 10px; padding: 0 18px 4px; margin: 14px 0; }
-.coleta-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 16px; align-items: start; }
+.coleta-grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 16px; align-items: start; }
 .coleta-campos { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 
 /* Botões com os nomes já cadastrados */

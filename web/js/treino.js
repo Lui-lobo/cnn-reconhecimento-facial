@@ -34,16 +34,19 @@ async function atualizarDataset() {
     tabela.appendChild(linha);
   });
 
-  // Bloqueios (impedem o treino) e dicas (só avisam)
+  // Bloqueios (impedem o treino) e dicas (só avisam). A pasta "ninguem" (fundo vazio) não conta como integrante.
   bloqueios = [];
   const dicas = [];
-  if (integrantes.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
-  integrantes.forEach((i) => {
+  const pessoas = integrantes.filter((i) => i.nome !== "ninguem");
+  if (pessoas.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
+  if (pessoas.length === integrantes.length) dicas.push("Opcional: colete também fotos com o nome “ninguem”, com a câmera apontada para o lugar vazio (cadeira, parede). A rede aprende a responder “ninguém”.");
+  pessoas.forEach((i) => {
     if (i.fotos < d.minimo_fotos) bloqueios.push(`${i.nome}: só ${i.fotos} foto(s); o mínimo é ${d.minimo_fotos}.`);
     else if (i.fotos < RECOMENDADO) dicas.push(`${i.nome}: ${i.fotos} fotos. O recomendado é ${RECOMENDADO} ou mais, em sessões diferentes.`);
   });
-  const menor = Math.min(...integrantes.map((i) => i.fotos));
-  if (integrantes.length >= 2 && maior > 2 * menor) dicas.push("As quantidades estão bem diferentes entre as pessoas: tentem deixá-las parecidas.");
+  const menor = Math.min(...pessoas.map((i) => i.fotos));
+  const maiorPessoa = Math.max(1, ...pessoas.map((i) => i.fotos));
+  if (pessoas.length >= 2 && maiorPessoa > 2 * menor) dicas.push("As quantidades estão bem diferentes entre as pessoas: tentem deixá-las parecidas.");
   const avisos = document.getElementById("dataset-avisos");
   avisos.innerHTML = "";
   bloqueios.map((t) => [t, "bloqueio"]).concat(dicas.map((t) => [t, "dica"])).forEach(([texto, tipo]) => {

@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from src.config import IMG_SIZE, CAMINHO_MODELO, CAMINHO_CLASSES
-from src.preprocessamento import preprocessar, redimensionar
+from src.preprocessamento import preprocessar, redimensionar, caixa_do_rosto
 
 
 def carregar_modelo():
@@ -16,27 +16,24 @@ def carregar_modelo():
     return model, classes
 
 
-def regioes_da_tela(largura, altura, n_pessoas):
-    # Divide a tela em n faixas verticais e pega o maior quadrado no centro de cada faixa.
-    # Sem detector de rosto, a rede não sabe onde estão os rostos: cada pessoa se posiciona em uma caixa fixa.
-    # Com 1 pessoa, o quadrado é o mesmo recorte central usado nas fotos de treino.
+def regioes_da_tela(largura, n_pessoas):
+    # Divide a tela em n faixas verticais, uma por pessoa: devolve (x inicial, largura) de cada faixa.
+    # Sem detector de rosto, a rede não sabe onde estão os rostos: cada pessoa se posiciona em uma faixa.
+    # Com 1 pessoa, a faixa é a tela inteira: o mesmo enquadramento das fotos de treino.
     faixa = largura // n_pessoas
-    lado = min(faixa, altura)
-    caixas = []
-    for i in range(n_pessoas):
-        x = i * faixa + (faixa - lado) // 2       # centraliza o quadrado dentro da faixa
-        y = (altura - lado) // 2
-        caixas.append((x, y, lado))
-    return caixas
+    return [(i * faixa, faixa) for i in range(n_pessoas)]
 
 
 def reconhecer_quadro(model, quadro, n_pessoas):
-    # Recorta cada caixa do quadro da webcam, aplica o MESMO pré-processamento do treino e passa pela CNN.
-    # Devolve uma lista com a posição de cada caixa e a probabilidade de cada integrante.
+    # Aplica o MESMO pré-processamento do treino em cada faixa do quadro da webcam e passa tudo pela CNN.
+    # Devolve uma lista com a posição do quadrado do rosto de cada faixa e a probabilidade de cada classe.
     altura, largura = quadro.shape[:2]
-    caixas = regioes_da_tela(largura, altura, n_pessoas)
-    entradas = np.array([preprocessar(quadro[y:y + lado, x:x + lado]) for x, y, lado in caixas])
-    probs = model(entradas, training=False).numpy()               # todas as caixas de uma vez
+    entradas, caixas = [], []
+    for x0, faixa in regioes_da_tela(largura, n_pessoas):
+        entradas.append(preprocessar(quadro[:, x0:x0 + faixa]))      # recorta o quadrado do rosto da faixa
+        topo, esquerda, lado = caixa_do_rosto(altura, faixa)         # onde está esse quadrado, para desenhar
+        caixas.append((x0 + esquerda, topo, lado))
+    probs = model(np.array(entradas), training=False).numpy()       # todas as faixas de uma vez
     return [{"x": int(x), "y": int(y), "lado": int(lado), "probabilidades": probs[i].tolist()}
             for i, (x, y, lado) in enumerate(caixas)]
 

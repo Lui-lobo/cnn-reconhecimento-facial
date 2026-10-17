@@ -5,10 +5,13 @@ import io
 import base64
 import numpy as np
 from PIL import Image
+from pillow_heif import register_heif_opener
 
 from src.config import DATASET_DIR
 
-EXTENSOES = (".jpg", ".jpeg", ".png")    # tipos de arquivo aceitos
+register_heif_opener()    # ensina o PIL a abrir fotos .heic/.heif (formato padrão do iPhone)
+
+EXTENSOES = (".jpg", ".jpeg", ".png", ".heic", ".heif")    # tipos de arquivo aceitos
 
 
 def ler_imagem(caminho):

@@ -77,14 +77,14 @@ async function responderComPython(res, pedido) {
 
 function listarDataset() {
   // Lista os integrantes (subpastas de dataset/) e quantas fotos cada um tem, com as mesmas regras do Python:
-  // ignora pastas que começam com "." ou "_" e conta só .jpg, .jpeg e .png
+  // ignora pastas que começam com "." ou "_" e conta só .jpg, .jpeg, .png, .heic e .heif
   if (!fs.existsSync(DATASET_DIR)) return [];
   return fs.readdirSync(DATASET_DIR, { withFileTypes: true })
     .filter((item) => item.isDirectory() && !/^[._]/.test(item.name))
     .map((item) => item.name).sort()
     .map((nome) => ({
       nome,
-      fotos: fs.readdirSync(path.join(DATASET_DIR, nome)).filter((arquivo) => /\.(jpe?g|png)$/i.test(arquivo)).length,
+      fotos: fs.readdirSync(path.join(DATASET_DIR, nome)).filter((arquivo) => /\.(jpe?g|png|hei[cf])$/i.test(arquivo)).length,
     }));
 }
 
@@ -92,7 +92,7 @@ function salvarFotos(nome, imagens) {
   // Salva as fotos (JPEG em base64) em dataset/<nome>/, continuando a numeração já existente
   const pasta = path.join(DATASET_DIR, nome);
   fs.mkdirSync(pasta, { recursive: true });
-  const jaExistem = fs.readdirSync(pasta).filter((arquivo) => /\.(jpe?g|png)$/i.test(arquivo)).length;
+  const jaExistem = fs.readdirSync(pasta).filter((arquivo) => /\.(jpe?g|png|hei[cf])$/i.test(arquivo)).length;
   imagens.forEach((texto, i) => {
     const bytes = Buffer.from(texto.split(",")[1], "base64");      // tira o cabeçalho "data:image/jpeg;base64,"
     const numero = String(jaExistem + i).padStart(4, "0");         // 7 -> "0007"
@@ -199,7 +199,7 @@ function iniciarTreino() {
 // Começa um treino (só um por vez), depois de conferir se o dataset tem o mínimo necessário
 app.post("/api/treino", (req, res) => {
   if (treino.rodando) return res.status(409).json({ erro: "Já existe um treino em andamento." });
-  const integrantes = listarDataset();
+  const integrantes = listarDataset().filter((i) => i.nome !== "ninguem");   // "ninguem" é a classe do fundo vazio
   if (integrantes.length < 2) return res.status(400).json({ erro: "São necessários pelo menos 2 integrantes com fotos." });
   const comPoucas = integrantes.find((i) => i.fotos < MINIMO_FOTOS);
   if (comPoucas) return res.status(400).json({ erro: `${comPoucas.nome} tem só ${comPoucas.fotos} foto(s): o mínimo é ${MINIMO_FOTOS}.` });
