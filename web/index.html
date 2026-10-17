@@ -199,6 +199,7 @@
             <tr><td>Recorte do rosto, tons de cinza, redimensionamento, equalização, máscara oval, aumento de dados, divisão dos dados, exemplos de “ninguém”, teste de troca de fundo</td><td><strong>código próprio com NumPy</strong></td></tr>
             <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
             <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
+            <tr><td>Grad-CAM (mapa de calor)</td><td><strong>código próprio</strong> sobre a nossa CNN; o TensorFlow só calcula o gradiente (o mesmo cálculo que usa no treino) e a ampliação bilinear é NumPy</td></tr>
             <tr><td>Gráficos e imagens intermediárias</td><td><code>matplotlib</code></td></tr>
             <tr><td>Servidor local (HTTP, fotos, resultados, treino pelo site)</td><td>Node.js com <code>Express</code></td></tr>
             <tr><td>Rede neural ao vivo</td><td>processo Python (<code>src/servico.py</code>) aberto pelo Node, sem servidor web</td></tr>
@@ -282,11 +283,22 @@
           <li><strong>Todos nos mesmos lugares:</strong> se cada pessoa for fotografada em um cenário só dela, o cenário vira
             uma pista mais fácil que o rosto. Fotografem todos no quarto, todos na sala, e assim por diante.</li>
           <li>Mantenham o rosto dentro do oval e mexam levemente a cabeça durante a captura.</li>
+          <li><strong>Perto e longe:</strong> tirem fotos com o rosto mais perto e mais longe da câmera. Se uma classe só
+            aparece de perto, a distância vira pista (veja o caso abaixo).</li>
           <li>Usem quantidades parecidas de fotos por pessoa (algo entre 150 e 300).</li>
+          <li><strong>Confiram as pastas antes de treinar:</strong> cada pasta deve ter só fotos daquela classe. A rede
+            aprende exatamente o que os rótulos dizem, inclusive os erros.</li>
           <li><strong>Fotos de “ninguém” (opcional, mas ajuda muito):</strong> coletem fotos com o nome <code>ninguem</code>,
             com a câmera apontada para os lugares vazios (a cadeira, a parede, a cama). Elas ensinam a rede a responder
             “ninguém” quando não há pessoa no oval. Mesmo sem elas, o treino cria exemplos de fundo sozinho (seção 5).</li>
         </ul>
+        <p class="destaque"><strong>Um erro de rótulo que aconteceu de verdade.</strong> Para testar um objeto não humano,
+          treinamos também a classe <code>bolotas</code> (um urso de pelúcia). Ao vivo, quando o Luiz chegava perto da câmera,
+          a rede respondia “bolotas”. Ao olhar as fotos já pré-processadas, vimos que 89 das 150 fotos da pasta
+          <code>bolotas/</code> eram do rosto do Luiz de perto, sem o urso. A rede não estava errando: tinha aprendido
+          “Luiz de perto = bolotas”, e as fotos do Luiz em <code>luiz/</code> eram todas de mais longe. Movemos essas fotos
+          para <code>dataset/_descartadas/</code> (pastas que começam com <code>_</code> são ignoradas) e retreinamos.
+          O modelo novo, que nunca viu essas 67 fotos de perto, reconheceu todas como Luiz. Antes, eram 0 de 67.</p>
         <figure class="figura">
           <img data-resultado="fotos_originais" alt="Seis fotos originais de cada integrante">
           <figcaption>Fotos originais de cada integrante, sem nenhum tratamento.</figcaption>
@@ -925,7 +937,8 @@
             <code>conv4</code> muda.</li>
           <li><strong>Medir a importância de cada mapa:</strong> a média do gradiente dele.</li>
           <li><strong>Somar os mapas multiplicados pela importância</strong> e manter só os valores positivos. O resultado, de
-            12×12, é ampliado para 96×96 com a nossa função <code>redimensionar</code> e pintado sobre a foto.
+            12×12, é ampliado para 96×96 por interpolação bilinear (função <code>ampliar_bilinear</code>, que deixa o mapa suave
+            em vez de quadriculado) e pintado sobre a foto.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="reconhecimento/grad_cam"></pre>
@@ -937,7 +950,7 @@
                 <li data-trecho="importancia = tf.reduce_mean(">Passo 3: a importância de cada mapa (média do gradiente).</li>
                 <li data-trecho="calor = tf.nn.relu(tf.reduce_sum(">Passo 4: soma ponderada dos mapas; a ReLU mantém só os positivos.</li>
                 <li data-trecho="calor = calor / (calor.max() + 1e-9)">Escala o mapa de calor para 0–1.</li>
-                <li data-trecho="return redimensionar(calor, IMG_SIZE)">Amplia de 12×12 para 96×96.</li>
+                <li data-trecho="return ampliar_bilinear(calor, IMG_SIZE)">Amplia de 12×12 para 96×96 por interpolação bilinear.</li>
               </ol>
             </details>
             <details class="no-codigo">
@@ -951,6 +964,11 @@
         </ol>
         <p>Se o calor estiver no <strong>rosto</strong>, a rede aprendeu o que queríamos. Se estiver no <strong>fundo</strong>,
           ela está usando o cenário para decidir, e precisamos de fotos em mais lugares diferentes.</p>
+        <p><strong>Atenção ao ler o mapa:</strong> a rede só olha o que precisa para separar as classes que conhece. Com uma
+          única pessoa no dataset (os outros são o urso e o fundo vazio), basta notar cabelo e pele humana para responder
+          o nome dela. Por isso o calor costuma cair no cabelo e no contorno da cabeça, e não nos olhos, nariz e boca. No
+          urso, ao contrário, o calor cai nos olhos, que são o que o diferencia. O mapa só vai se concentrar nos traços do
+          rosto quando houver pelo menos duas pessoas para a rede diferenciar.</p>
         <figure class="figura">
           <img data-resultado="gradcam" alt="Grad-CAM de uma foto de teste de cada integrante">
           <figcaption>Uma foto de teste de cada classe (em cima) e o mapa de calor do Grad-CAM (embaixo).</figcaption>
@@ -1180,6 +1198,10 @@
           <dd>Fotos seguidas são quase iguais. Separá-las ao acaso colocaria “gêmeas” no treino e no teste, inflando a nota.</dd>
           <dt>Por que aumento de dados só no treino?</dt>
           <dd>O teste precisa medir o desempenho em fotos reais.</dd>
+          <dt>Por que a rede confundia o Luiz com o urso de pelúcia?</dt>
+          <dd>Por um erro de rótulo: a pasta <code>bolotas/</code> tinha 89 fotos do Luiz de perto. A rede aprendeu “Luiz de perto = bolotas”. Depois que tiramos essas fotos da pasta e retreinamos, ela acertou todas as fotos de perto (seção 2).</dd>
+          <dt>Quantas fotos e de onde?</dt>
+          <dd>Mais importante que a quantidade é a variedade: 150 a 300 fotos por pessoa, em 3 ou mais sessões com lugares, luz e distâncias diferentes, com todos fotografados nos mesmos lugares.</dd>
         </dl>
         <h3>A rede</h3>
         <dl class="perguntas">
@@ -1195,6 +1217,8 @@
           <dd>Ele transforma as pontuações da última camada em probabilidades que somam 1, uma para cada classe.</dd>
           <dt>Para que serve a classe “ninguém”?</dt>
           <dd>O softmax sempre escolhe uma das classes que conhece. Sem a classe “ninguém”, a rede era obrigada a dizer o nome de alguém até para uma cadeira vazia (com 97% de confiança para uma imagem cinza lisa). Com ela, a rede tem uma resposta certa para “não há pessoa no oval”.</dd>
+          <dt>O Grad-CAM é um sistema pronto?</dt>
+          <dd>Não. É uma função nossa (<code>grad_cam</code>) que só explica a decisão da nossa CNN, sem participar do reconhecimento. Do TensorFlow ela usa apenas o cálculo do gradiente, o mesmo que a rede usa para aprender. A ampliação do mapa para 96×96 (<code>ampliar_bilinear</code>) é NumPy.</dd>
           <dt>Como vocês sabem que a rede olha o rosto, e não o fundo?</dt>
           <dd>Pelo Grad-CAM (seção 10) e pelo teste de troca de fundo: juntamos o rosto de um integrante com o entorno de outro e vemos a quem a rede atribui a imagem.</dd>
           <dt>O que são época e batch?</dt>
@@ -1214,7 +1238,7 @@
           <dt>Como reconhece várias pessoas ao vivo?</dt>
           <dd>Sem detector de rosto, a rede não sabe onde estão os rostos. Por isso a tela é dividida em faixas fixas, cada uma com o seu oval, e cada pessoa se posiciona em uma. Achar rostos em qualquer lugar exigiria um detector (como os do OpenCV), que o trabalho não permite.</dd>
           <dt>Quais são as limitações?</dt>
-          <dd>O rosto precisa estar dentro do oval. Pessoas de fora do grupo não têm classe própria: para elas usamos o limiar de 60% (“desconhecido”), que nem sempre basta. E a classe “ninguém” funciona melhor com fotos reais dos lugares vazios na pasta <code>dataset/ninguem/</code>.</dd>
+          <dd>O rosto precisa estar dentro do oval. Pessoas de fora do grupo não têm classe própria: para elas usamos o limiar de 60% (“desconhecido”), que nem sempre basta. A classe “ninguém” funciona melhor com fotos reais dos lugares vazios na pasta <code>dataset/ninguem/</code>. E se as fotos de alguém vierem de um só cômodo, o teste usa esse mesmo cômodo, e a nota fica otimista em relação a um lugar novo.</dd>
           <dt>Por que a rede roda no servidor e não no navegador?</dt>
           <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
           <dt>Por que um servidor Node e um processo Python?</dt>
