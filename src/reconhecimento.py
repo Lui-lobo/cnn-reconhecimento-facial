@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from src.config import IMG_SIZE, CAMINHO_MODELO, CAMINHO_CLASSES
-from src.preprocessamento import preprocessar, redimensionar, caixa_do_rosto
+from src.preprocessamento import preprocessar, caixa_do_rosto
 
 
 def carregar_modelo():
@@ -43,6 +43,19 @@ def criar_modelo_gradcam(model):
     return keras.Model(model.input, [model.get_layer("conv4").output, model.get_layer("pontuacoes").output])
 
 
+def ampliar_bilinear(img, tamanho):
+    # Amplia um mapa quadrado pequeno (ex.: 12x12) para tamanho x tamanho por interpolação bilinear:
+    # cada pixel novo é a média dos 4 vizinhos da grade pequena, pesada pela distância. Assim o mapa de calor
+    # fica suave e acompanha o contorno do rosto, em vez de virar quadrados de 8x8 pixels (vizinho mais próximo).
+    n = img.shape[0]
+    pos = np.clip((np.arange(tamanho) + 0.5) * n / tamanho - 0.5, 0, n - 1)   # posição de cada pixel novo na grade pequena
+    i0 = np.floor(pos).astype(int)                                             # vizinho de cima / da esquerda
+    i1 = np.minimum(i0 + 1, n - 1)                                             # vizinho de baixo / da direita
+    t = pos - i0                                                               # distância até o primeiro vizinho (0-1)
+    linhas = img[i0] * (1 - t)[:, None] + img[i1] * t[:, None]                 # interpola na vertical
+    return linhas[:, i0] * (1 - t) + linhas[:, i1] * t                         # e depois na horizontal
+
+
 def grad_cam(modelo_gradcam, img):
     # Gera um mapa de calor (96x96, valores 0-1) das regiões da foto que mais pesaram na decisão.
     # Usamos a pontuação de antes do softmax: com quase 100% de certeza, a probabilidade quase não muda
@@ -55,4 +68,4 @@ def grad_cam(modelo_gradcam, img):
     importancia = tf.reduce_mean(gradientes, axis=(0, 1, 2))     # importância média de cada mapa
     calor = tf.nn.relu(tf.reduce_sum(mapas[0] * importancia, axis=-1)).numpy()   # soma ponderada (só positivos)
     calor = calor / (calor.max() + 1e-9)                         # escala para 0-1
-    return redimensionar(calor, IMG_SIZE), classe                # amplia de 12x12 para 96x96
+    return ampliar_bilinear(calor, IMG_SIZE), classe             # amplia de 12x12 para 96x96, suavizando

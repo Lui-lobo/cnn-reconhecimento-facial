@@ -40,7 +40,7 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 │   ├── modelo.py           construir_cnn
 │   ├── metricas.py         matriz de confusão, VP/FP/FN/VN, precisão, recall, F1, especificidade, acurácia
 │   ├── visualizacoes.py    imagens intermediárias em PNG
-│   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam
+│   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam, ampliar_bilinear
 │   ├── robustez.py         teste de troca de fundo (a rede segue o rosto ou o cenário?)
 │   ├── emocao.py           emoção do rosto com o modelo pronto FER+ (ONNX): baixar, preparar a entrada, classificar
 │   ├── servico.py          processo Python aberto pelo servidor.js: recebe pedidos e roda a CNN
@@ -94,6 +94,9 @@ Dicas para a rede aprender o rosto, e não o fundo:
 - façam **3 ou mais sessões** por pessoa, em **lugares e iluminações diferentes**;
 - fotografem **todos nos mesmos lugares**: se cada pessoa tiver um cenário só dela, o cenário vira uma pista mais fácil que o rosto;
 - mantenham o rosto dentro do oval e mexam levemente a cabeça durante a captura;
+- tirem fotos **perto e longe** da câmera: se uma classe só aparece de perto, a distância vira pista;
+- **confiram as pastas antes de treinar**: cada pasta deve ter só fotos daquela classe (a rede aprende os erros de rótulo também).
+  Fotos que não servem podem ir para `dataset/_descartadas/`, que o treino ignora;
 - (opcional, mas ajuda muito) coletem fotos com o nome **`ninguem`**, com a câmera apontada para os lugares vazios
   (cadeira, parede). Elas viram a classe “ninguém”, que a rede responde quando não há pessoa no oval. Mesmo sem
   essa pasta, o treino cria exemplos de “ninguém” a partir do fundo das fotos dos integrantes;
@@ -216,6 +219,7 @@ que vem do modelo pronto FER+.
 | Montar e treinar a CNN | TensorFlow/Keras, **sem modelo pré-treinado** |
 | Matriz de confusão e métricas | **código próprio com NumPy** |
 | Emoção do rosto (só ela) | modelo **pronto** FER+ (ONNX) com `onnxruntime` |
+| Grad-CAM (mapa de calor) | **código próprio** sobre a nossa CNN; o TensorFlow só calcula o gradiente e a ampliação bilinear é NumPy |
 | Gráficos e imagens intermediárias | `matplotlib` |
 | Servidor local | Node.js com `Express` (a rede roda num processo Python aberto por ele) |
 | Site e captura da webcam | HTML, CSS e JavaScript puros (`navigator.mediaDevices.getUserMedia`) |
