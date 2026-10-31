@@ -66,7 +66,12 @@
       <button id="voltar-ao-vivo" class="botao principal">Voltar ao vivo</button>
     </div>
     <div class="etapas" id="etapas"></div>
+    <h3>Quem é (nossa CNN)</h3>
     <div id="barras" class="barras"></div>
+    <div id="barras-emocao" hidden>
+      <h3>Emoção (modelo pronto FER+)</h3>
+      <div class="barras"></div>
+    </div>
   </section>
 
   <!-- Preparar o modelo: coleta das fotos e treino da rede, sem precisar do terminal (seção recolhível).
@@ -150,6 +155,7 @@
         <li><a href="#avaliacao">Avaliação</a></li>
         <li><a href="#imagens-rede">Imagens intermediárias</a></li>
         <li><a href="#ao-vivo">Reconhecimento ao vivo</a></li>
+        <li><a href="#emocao">Emoção</a></li>
         <li><a href="#perguntas">Perguntas prováveis</a></li>
       </ol>
       <p class="indice-topo"><a href="#app">↑ Voltar à aplicação</a></p>
@@ -168,8 +174,10 @@
         <h2><span class="numero">1</span> Visão geral</h2>
         <p class="resumo">Treinamos <strong>do zero</strong> uma Rede Neural Convolucional (CNN) que recebe a foto de um
           rosto e diz qual integrante do grupo ela é.</p>
-        <p>Não usamos modelo pré-treinado nem detector de rosto pronto: todo o tratamento das imagens e as métricas foram
-          programados por nós com NumPy. A biblioteca TensorFlow/Keras é usada só para montar e treinar a rede.</p>
+        <p>Para reconhecer a pessoa, não usamos modelo pré-treinado nem detector de rosto pronto: todo o tratamento das
+          imagens e as métricas foram programados por nós com NumPy, e a biblioteca TensorFlow/Keras é usada só para montar
+          e treinar a rede. A única exceção, permitida pelo trabalho, é a <strong>emoção</strong> (alegre, triste, bravo,
+          com medo...), que vem de um modelo pronto (FER+) aplicado no mesmo recorte do rosto (seção 12).</p>
         <div class="numeros" id="resumo-geral"></div>
 
         <h3>O caminho de uma foto</h3>
@@ -182,6 +190,7 @@
           <li>Treino<small>Adam + EarlyStopping</small></li>
           <li>Avaliação<small>matriz e métricas</small></li>
           <li>Ao vivo<small>webcam no site</small></li>
+          <li>Emoção<small>modelo pronto FER+</small></li>
         </ol>
 
         <div class="como-ler">
@@ -198,6 +207,7 @@
             <tr><td>Abrir e salvar o arquivo .jpg/.png/.heic</td><td><code>PIL</code> + <code>pillow-heif</code> para .heic (só transforma o arquivo em uma matriz de números)</td></tr>
             <tr><td>Recorte do rosto, tons de cinza, redimensionamento, equalização, máscara oval, aumento de dados, divisão dos dados, exemplos de “ninguém”, teste de troca de fundo</td><td><strong>código próprio com NumPy</strong></td></tr>
             <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
+            <tr><td>Emoção do rosto (só ela)</td><td>modelo <strong>pronto</strong> FER+ (ONNX), executado com <code>onnxruntime</code></td></tr>
             <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
             <tr><td>Gráficos e imagens intermediárias</td><td><code>matplotlib</code></td></tr>
             <tr><td>Servidor local (HTTP, fotos, resultados, treino pelo site)</td><td>Node.js com <code>Express</code></td></tr>
@@ -1114,6 +1124,7 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="ao_vivo.js#mediaDosUltimos"></pre>
               <ol class="notas">
+                <li data-trecho="lista = historico">Serve para os integrantes e, com outra lista, para as emoções (seção 12).</li>
                 <li data-trecho=".concat([probabilidades]).slice(-QUADROS_NA_MEDIA)">Junta as probabilidades novas às anteriores e fica só com as 5 últimas.</li>
                 <li data-trecho="reduce((soma, quadro)">Para cada integrante, soma as probabilidades dos 5 quadros e divide por 5.</li>
               </ol>
@@ -1128,7 +1139,9 @@
                 <li data-trecho='const vazio = resposta.classes[melhor] === "ninguem"'>A rede acha que não há ninguém no oval.</li>
                 <li data-trecho="const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x">Vídeo espelhado: só a posição x da caixa é espelhada (o texto continua legível).</li>
                 <li data-trecho="ctx.ellipse(">Desenha o oval-guia, do mesmo tamanho da máscara do pré-processamento (verde, vermelho ou cinza).</li>
-                <li data-trecho="ctx.fillText(">Escreve o nome e a confiança.</li>
+                <li data-trecho="ctx.fillText(texto">Escreve o nome e a confiança.</li>
+                <li data-trecho="const emocao = vazio">Se há alguém no oval (mesmo “desconhecido”), calcula a emoção média dos últimos quadros.</li>
+                <li data-trecho="ctx.fillText(emocao">Escreve a emoção numa faixa roxa embaixo do oval.</li>
               </ol>
             </details>
           </li>
@@ -1153,15 +1166,120 @@
                 <li data-trecho='calor, _ = grad_cam(m["gradcam"], entrada)'>O mapa de calor do Grad-CAM (seção 10).</li>
                 <li data-trecho="mistura = 0.55 * entrada * 255 + 0.45 * colorido">Mistura a foto em cinza (55%) com o calor colorido (45%).</li>
                 <li data-trecho='"etapas": [png_base64('>Converte cada imagem em PNG para o navegador mostrar.</li>
+                <li data-trecho='"entrada_emocao": png_base64('>A imagem 64×64 que o FER+ recebe, para conferir o enquadramento da emoção (seção 12).</li>
               </ol>
             </details>
           </li>
         </ol>
       </article>
 
-      <!-- 12. Perguntas prováveis -->
+      <!-- 12. Emoção -->
+      <article id="emocao" class="secao">
+        <h2><span class="numero">12</span> Emoção: alegre, triste, bravo, com medo</h2>
+        <p class="resumo">Além de dizer <strong>quem</strong> está no oval, o site mostra <strong>como</strong> a pessoa está:
+          alegre, triste, bravo(a), com medo, neutro(a), surpreso(a), com nojo ou com desprezo.</p>
+        <p>Esta é a única parte que usa um <strong>modelo pronto</strong>, como o trabalho permite: o
+          <strong>FER+</strong>, da Microsoft, treinado com dezenas de milhares de rostos rotulados por emoção e distribuído
+          no formato ONNX. Quem é a pessoa, o “desconhecido” e o “ninguém” continuam vindo <strong>só da nossa CNN</strong>.
+          O FER+ não procura o rosto na imagem: ele recebe um quadrado no mesmo centro do oval, só que mais fechado no rosto.</p>
+
+        <h3>O que o modelo procura em cada emoção</h3>
+        <p>O FER+ não segue regras escritas: ele aprendeu com cerca de 35 mil fotos de rostos (48×48, do dataset FER2013),
+          em que <strong>10 pessoas votaram</strong> na emoção de cada foto. Por isso ele devolve probabilidades, e não um
+          “sim ou não”. Quem votou se baseou nos sinais clássicos de cada expressão (estudos de Paul Ekman):</p>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Emoção</th><th>Sinais típicos no rosto</th></tr></thead>
+          <tbody>
+            <tr><td><strong>alegre</strong></td><td>cantos da boca para cima, bochechas sobem, ruguinhas no canto dos olhos; muitas vezes dentes à mostra</td></tr>
+            <tr><td><strong>triste</strong></td><td>cantos da boca para baixo, parte de dentro das sobrancelhas sobe, pálpebras caídas, olhar para baixo</td></tr>
+            <tr><td><strong>bravo(a)</strong></td><td>sobrancelhas abaixadas e juntas (testa franzida), olhar fixo e tenso, lábios apertados ou dentes cerrados</td></tr>
+            <tr><td><strong>com medo</strong></td><td>sobrancelhas sobem <strong>e se juntam</strong>, olhos bem arregalados, boca aberta com os lábios esticados para os lados</td></tr>
+            <tr><td><strong>surpreso(a)</strong></td><td>sobrancelhas sobem arqueadas (sem se juntar), olhos arregalados, boca aberta em “O” relaxado</td></tr>
+            <tr><td><strong>com nojo</strong></td><td>nariz franzido, lábio de cima levantado</td></tr>
+            <tr><td><strong>com desprezo</strong></td><td>só um canto da boca levantado (meio sorriso de lado)</td></tr>
+            <tr><td><strong>neutro(a)</strong></td><td>rosto relaxado, sem nenhum desses sinais</td></tr>
+          </tbody>
+        </table></div>
+        <p>As confusões mais comuns são <strong>medo × surpresa</strong> (diferem quase só nas sobrancelhas juntas e na boca
+          esticada) e <strong>triste × neutro</strong>. Os dados de treino do FER+ também são desbalanceados: há muito mais
+          rostos neutros e alegres do que com medo, nojo ou desprezo, então na dúvida ele tende a responder neutro ou
+          alegre. Como o modelo vê o rosto em só 64×64, expressões sutis tendem a sair “neutro”: na demonstração,
+          exagerem a expressão, segurem por 2 segundos e mantenham o rosto inteiro dentro do oval, com luz de frente.</p>
+
+        <h3>Passo a passo</h3>
+        <ol class="passos">
+          <li><strong>Baixa o modelo uma vez.</strong> Na primeira vez que o servidor abre, o arquivo do FER+ (~35 MB) é
+            baixado para <code>modelo/emocao_ferplus.onnx</code> (ou rode <code>python -m src.emocao</code>). Ele é aberto
+            com o <code>onnxruntime</code>, que só executa o modelo, sem treinar nada. Sem internet, o site continua
+            reconhecendo as pessoas, só sem a emoção.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="emocao/baixar_modelo_emocao"></pre>
+              <ol class="notas">
+                <li data-trecho="if not os.path.exists(CAMINHO_EMOCAO)">Só baixa se o arquivo ainda não existir.</li>
+                <li data-trecho="urllib.request.urlretrieve(">Baixa para um arquivo “.parcial”...</li>
+                <li data-trecho="os.replace(">...que só ganha o nome final quando o download termina inteiro.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Prepara o rosto do jeito que o FER+ espera.</strong> Reaproveita as nossas etapas 1 a 3 (recorte do
+            rosto, tons de cinza, redução), mas para 64×64 e <strong>sem</strong> equalização nem máscara oval: o FER+ foi
+            treinado com rostos “normais”, então é assim que ele funciona melhor. O quadrado também é <strong>mais
+            fechado</strong>: 45% do menor lado da imagem, contra 60% da nossa CNN, no mesmo centro. As fotos do FER+ vão
+            da testa ao queixo; com o quadrado da CNN, o rosto ocupava só metade da imagem e os detalhes de olhos e
+            sobrancelhas (que separam triste, bravo e com medo) ficavam com poucos pixels. A entrada da nossa CNN não
+            muda: a fração mais fechada é passada só aqui.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="emocao/entrada_emocao"></pre>
+              <ol class="notas">
+                <li data-trecho="redimensionar(para_cinza(recorte_rosto(img, FRACAO_EMOCAO)), TAMANHO_EMOCAO)">Recorte mais fechado (<code>FRACAO_EMOCAO</code> = 0,45) → cinza → 64×64, com as nossas funções da seção 4.</li>
+                <li data-trecho="return rosto.reshape(">O formato do FER+: canais primeiro, tons de 0 a 255.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Calcula as probabilidades das 8 emoções.</strong> O FER+ devolve uma pontuação para cada emoção; o
+            softmax (o mesmo da última camada da nossa CNN) transforma essas pontuações em probabilidades que somam 1.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="emocao/classificar_emocoes"></pre>
+              <ol class="notas">
+                <li data-trecho="sessao.run(None, {nome_entrada: entrada_emocao(r)[np.newaxis]})">Passa cada faixa da tela pelo FER+ (ele aceita um rosto por vez).</li>
+                <li data-trecho="return softmax(np.array(pontuacoes))">Transforma as pontuações em probabilidades.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Junta com a resposta da CNN.</strong> No reconhecimento ao vivo, cada caixa volta com as
+            probabilidades dos integrantes (nossa CNN) e as das emoções (FER+). A página faz a média dos últimos 5 quadros
+            das duas e escreve a emoção numa faixa roxa embaixo do oval. Quando a CNN diz “ninguém”, não mostra emoção.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="servico/reconhecer"></pre>
+              <ol class="notas">
+                <li data-trecho='caixas = reconhecer_quadro(m["model"]'>Quem é: a nossa CNN, exatamente como antes.</li>
+                <li data-trecho="if obter_emocao():">Só calcula a emoção se o modelo pronto estiver disponível.</li>
+                <li data-trecho="faixas = [quadro[:, x0:x0 + faixa]">As mesmas faixas da tela usadas pela CNN.</li>
+                <li data-trecho='caixa["emocoes"] = probs.tolist()'>Cada caixa ganha as probabilidades das 8 emoções.</li>
+              </ol>
+            </details>
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-js="ao_vivo.js#textoDaEmocao"></pre>
+              <ol class="notas">
+                <li data-trecho="mediaDosUltimos(i, caixa.emocoes, historicoEmocao)">A média dos últimos 5 quadros, numa lista separada da dos integrantes.</li>
+                <li data-trecho="return `${nomes[melhor]}">A emoção mais provável e a confiança, ex.: “alegre (82%)”.</li>
+              </ol>
+            </details>
+          </li>
+        </ol>
+        <p>No botão “Ver o que a rede vê”, o painel mostra também a <strong>imagem que o FER+ recebe</strong> (com borda
+          roxa) e as barras das 8 emoções, separadas das barras dos integrantes. Se a emoção não estiver saindo, confiram
+          nessa imagem se o rosto aparece inteiro, da testa ao queixo, e bem iluminado.</p>
+      </article>
+
+      <!-- 13. Perguntas prováveis -->
       <article id="perguntas" class="secao">
-        <h2><span class="numero">12</span> Perguntas prováveis na apresentação</h2>
+        <h2><span class="numero">13</span> Perguntas prováveis na apresentação</h2>
         <h3>Dados e pré-processamento</h3>
         <dl class="perguntas">
           <dt>Por que recortar em vez de só redimensionar?</dt>
@@ -1225,6 +1343,14 @@
           <dd>Para o nome não “piscar” quando um quadro isolado sai diferente. Com ~4 quadros por segundo, a média cobre pouco mais de 1 segundo.</dd>
           <dt>O vídeo espelhado não atrapalha a rede?</dt>
           <dd>Não: o espelhamento é só visual (CSS). O quadro enviado ao servidor é o original, como as fotos de treino; apenas a posição das caixas é espelhada no desenho.</dd>
+          <dt>A emoção também vem da CNN de vocês?</dt>
+          <dd>Não. O trabalho permite um modelo pronto só para a emoção, e usamos o FER+ (Microsoft). Ele olha o mesmo rosto, no mesmo oval, mas não decide quem é a pessoa: isso, o “desconhecido” e o “ninguém” vêm só da nossa rede.</dd>
+          <dt>Por que o FER+ usa um recorte diferente do da CNN?</dt>
+          <dd>Cada rede recebe a entrada no formato em que foi treinada. O FER+ aprendeu com rostos recortados da testa ao queixo, então recebe um quadrado mais fechado (45% do menor lado). A nossa CNN foi treinada com o quadrado de 60% e a máscara oval, e continua recebendo exatamente isso: mudar a entrada dela exigiria retreinar.</dd>
+          <dt>Por que o FER+ não usa a equalização e a máscara oval?</dt>
+          <dd>Porque ele foi treinado com rostos sem esse tratamento. A máscara existe para a NOSSA rede não decorar o cenário; o FER+ já está treinado, então damos a ele a entrada no formato em que aprendeu.</dd>
+          <dt>Por que mostrar a emoção de um “desconhecido”?</dt>
+          <dd>A emoção não depende de saber quem a pessoa é: qualquer rosto no oval tem uma expressão. Só quando a CNN diz “ninguém” a emoção é escondida.</dd>
           <dt>O código desta página pode estar desatualizado?</dt>
           <dd>Não: os blocos de código são lidos do próprio arquivo Python pela rota <code>/api/codigo</code> (o servidor recorta a função direto do arquivo <code>.py</code> ou <code>.js</code>), e as métricas vêm do <code>resultados.json</code> gerado no último treino.</dd>
         </dl>
@@ -1235,7 +1361,7 @@
 </main>
 
 <footer class="rodape">
-  <div class="largura">CNN treinada do zero com TensorFlow/Keras · tratamento das imagens e métricas com NumPy · servidor Node.js · site em HTML, CSS e JavaScript puros.</div>
+  <div class="largura">CNN treinada do zero com TensorFlow/Keras · emoção com o modelo pronto FER+ · tratamento das imagens e métricas com NumPy · servidor Node.js · site em HTML, CSS e JavaScript puros.</div>
 </footer>
 
 <script src="js/ao_vivo.js"></script>

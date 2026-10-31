@@ -4,7 +4,8 @@ Uma Rede Neural Convolucional (CNN) treinada **do zero** que reconhece os integr
 O repositório tem o pipeline completo em Python (pré-processamento, divisão, aumento de dados, CNN, treino,
 métricas e imagens intermediárias) e um **site local**, servido por Node.js, com:
 
-- **no topo:** o reconhecimento **ao vivo pela webcam**, usando o modelo treinado;
+- **no topo:** o reconhecimento **ao vivo pela webcam**, usando o modelo treinado, com a **emoção** de cada pessoa
+  (alegre, triste, bravo(a), com medo...) embaixo do nome;
 - **logo abaixo:** a **documentação** passo a passo, com o código real de cada etapa, as imagens
   intermediárias e as métricas do último treino.
 
@@ -41,6 +42,7 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 │   ├── visualizacoes.py    imagens intermediárias em PNG
 │   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam
 │   ├── robustez.py         teste de troca de fundo (a rede segue o rosto ou o cenário?)
+│   ├── emocao.py           emoção do rosto com o modelo pronto FER+ (ONNX): baixar, preparar a entrada, classificar
 │   ├── servico.py          processo Python aberto pelo servidor.js: recebe pedidos e roda a CNN
 │   └── treinar.py          executa o pipeline completo
 ├── web/                    site: index.html, css/, js/, img/resultados/ (PNGs gerados pelo treino)
@@ -69,7 +71,7 @@ source .venv/bin/activate
 ### 2. Instalar as dependências
 
 ```bash
-pip install -r requirements.txt   # Python: TensorFlow, NumPy, Pillow, matplotlib, pytest
+pip install -r requirements.txt   # Python: TensorFlow, NumPy, Pillow, matplotlib, onnxruntime, pytest
 npm install                       # Node: Express
 ```
 
@@ -139,7 +141,54 @@ O navegador só libera a webcam em `localhost` ou em HTTPS, por isso o servidor 
 - **2 pessoas:** a tela é dividida em duas faixas lado a lado, cada uma com o seu oval; cada pessoa fica dentro de um.
 - **Ninguém:** se a rede achar que o oval está vazio, ele fica cinza com “ninguém”.
 - **Limiar:** abaixo dele (padrão 60%), o oval fica vermelho com “desconhecido”.
-- **Ver o que a rede vê:** congela o quadro e mostra as etapas do pré-processamento, o Grad-CAM e as probabilidades.
+- **Emoção:** embaixo de cada oval com uma pessoa (reconhecida ou “desconhecido”) aparece, numa faixa roxa, a emoção
+  mais provável: alegre, triste, bravo(a), com medo, neutro(a), surpreso(a), com nojo ou com desprezo (média dos últimos 5 quadros).
+- **Ver o que a rede vê:** congela o quadro e mostra as etapas do pré-processamento, o Grad-CAM, as probabilidades
+  de cada integrante e as de cada emoção.
+
+### Emoção (modelo pronto)
+
+A emoção é a **única** parte que usa um modelo pré-treinado, como o trabalho permite: o **FER+** (Microsoft, formato
+ONNX, executado com `onnxruntime`). Na primeira vez que o servidor abre, o arquivo (~35 MB) é baixado sozinho para
+`modelo/emocao_ferplus.onnx`; para baixar antes, rode `python -m src.emocao`. O FER+ recebe um quadrado no mesmo
+centro do oval, só que mais fechado no rosto (45% do menor lado, contra 60% da CNN), em cinza, 64×64, sem equalização
+e sem máscara; a entrada da CNN não muda. No painel “Ver o que a rede vê”, a imagem com borda roxa é o que o FER+
+recebe. **Quem é** a pessoa, o “desconhecido” e o “ninguém” continuam vindo só da nossa CNN. Sem internet, o site funciona normalmente, só sem a emoção.
+
+#### Sobre o FER+
+
+- **Origem:** Microsoft Research, artigo *Training Deep Networks for Facial Expression Recognition with Crowd-Sourced
+  Label Distribution* (Barsoum et al., ICMI 2016, [arXiv:1608.01041](https://arxiv.org/abs/1608.01041)).
+- **Dados:** as cerca de 35 mil fotos de rostos (48×48) do dataset FER2013, rerrotuladas pela Microsoft com
+  **10 pessoas votando** na emoção de cada foto (rótulos em [microsoft/FERPlus](https://github.com/microsoft/FERPlus)).
+  Por isso a saída é uma distribuição de probabilidades, que imita como os votos se dividiam.
+- **Arquivo:** `emotion-ferplus-8.onnx`, do [ONNX Model Zoo](https://github.com/onnx/models/tree/main/validated/vision/body_analysis/emotion_ferplus);
+  treinado no CNTK 2.5.1 e exportado com opset 8.
+- **Entrada e saída:** um rosto 64×64 em cinza, com tons de 0 a 255 (o próprio modelo normaliza a entrada, com uma
+  subtração e uma divisão logo no começo); a saída são 8 pontuações sem softmax (neutro, alegria, surpresa, tristeza,
+  raiva, nojo, medo e desprezo), que transformamos em probabilidades com o nosso `softmax`.
+
+**Arquitetura** (conferida no próprio arquivo): uma CNN no estilo VGG13, com **10 convoluções** e cerca de
+**8,76 milhões de parâmetros**.
+
+| Bloco | Camadas | Filtros |
+|---|---|---|
+| 1 | 2 convoluções 3×3 + max pooling + dropout | 64 |
+| 2 | 2 convoluções 3×3 + max pooling + dropout | 128 |
+| 3 | 3 convoluções 3×3 + max pooling + dropout | 256 |
+| 4 | 3 convoluções 3×3 + max pooling + dropout | 256 |
+| Densas | 4×4×256 → 1024 → 1024 (com dropout) → 8 saídas | — |
+
+**Comparação com a nossa CNN:** as duas seguem a mesma ideia (convoluções → pooling → dropout → camadas densas →
+uma saída por classe). A diferença é a escala: a nossa tem 4 convoluções e foi treinada do zero com algumas centenas
+de fotos de cada integrante, então só conhece o grupo; o FER+ aprendeu com dezenas de milhares de rostos de pessoas
+diferentes, por isso reconhece a expressão de qualquer pessoa. O nosso treino não altera o FER+: o arquivo dele nunca
+é aberto pelo `python -m src.treinar`.
+
+**Limitações:** os dados do FER+ são desbalanceados (muito mais rostos neutros e alegres do que com medo, nojo ou
+desprezo), então na dúvida ele tende a responder neutro ou alegre. Medo × surpresa e triste × neutro são as confusões
+mais comuns, e expressões sutis costumam sair “neutro”: para testar, exagerem a expressão, segurem por 2 segundos e
+mantenham o rosto centralizado no oval, com luz de frente.
 
 Se o modelo ainda não foi treinado, o site avisa para rodar `python -m src.treinar` primeiro.
 
@@ -150,13 +199,15 @@ pytest
 ```
 
 Testa o pré-processamento (formato `(96, 96, 1)` em `float32` entre 0 e 1, equalização sem NaN, recorte quadrado)
-e as métricas (VP/FP/FN/VN, precisão, recall, F1, especificidade e acurácia contra valores calculados à mão).
+e as métricas (VP/FP/FN/VN, precisão, recall, F1, especificidade e acurácia contra valores calculados à mão),
+além da entrada e do softmax da parte de emoção.
 
 ## Regras do trabalho
 
 Não usamos bibliotecas auxiliares para o modelo nem para os tratamentos: nada de detector de rosto pronto
 (OpenCV, dlib, face_recognition, MediaPipe), modelo pré-treinado, transfer learning, `ImageDataGenerator`,
-camadas de aumento de dados do Keras ou scikit-learn.
+camadas de aumento de dados do Keras ou scikit-learn. A única exceção, permitida pelo trabalho, é a **emoção**,
+que vem do modelo pronto FER+.
 
 | Etapa | Ferramenta |
 |---|---|
@@ -164,6 +215,7 @@ camadas de aumento de dados do Keras ou scikit-learn.
 | Recorte, tons de cinza, redimensionamento, equalização, aumento de dados, divisão dos dados | **código próprio com NumPy** |
 | Montar e treinar a CNN | TensorFlow/Keras, **sem modelo pré-treinado** |
 | Matriz de confusão e métricas | **código próprio com NumPy** |
+| Emoção do rosto (só ela) | modelo **pronto** FER+ (ONNX) com `onnxruntime` |
 | Gráficos e imagens intermediárias | `matplotlib` |
 | Servidor local | Node.js com `Express` (a rede roda num processo Python aberto por ele) |
 | Site e captura da webcam | HTML, CSS e JavaScript puros (`navigator.mediaDevices.getUserMedia`) |

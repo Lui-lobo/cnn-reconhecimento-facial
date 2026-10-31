@@ -1,6 +1,7 @@
 // Reconhecimento ao vivo pela webcam.
 // Ciclo: captura um quadro -> envia ao servidor (/api/reconhecer) -> recebe as probabilidades de cada caixa
 // -> faz a média dos últimos 5 quadros -> desenha as caixas com o nome sobre o vídeo -> repete (~4 vezes por segundo).
+// Embaixo de cada oval aparece também a emoção (alegre, triste, bravo, com medo...), vinda do modelo pronto FER+.
 
 const INTERVALO_MS = 250;      // tempo mínimo entre dois quadros enviados
 const QUADROS_NA_MEDIA = 5;    // média dos últimos 5 quadros para o nome não ficar "piscando"
@@ -19,6 +20,7 @@ let stream = null;        // conexão com a câmera
 let ligado = false;       // o loop de reconhecimento está rodando?
 let congelado = false;    // true enquanto o painel "Ver o que a rede vê" está aberto
 let historico = [];       // historico[i] = probabilidades dos últimos quadros da caixa i
+let historicoEmocao = []; // o mesmo, para as probabilidades das emoções
 
 // ---------- Funções auxiliares (também usadas por coleta.js) ----------
 
@@ -90,6 +92,7 @@ async function ligarWebcam() {
   botaoVerRede.disabled = false;
   ligado = true;
   historico = [];
+  historicoEmocao = [];
   mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
   loopReconhecimento();
 }
@@ -132,17 +135,26 @@ async function loopReconhecimento() {
   }
 }
 
-function mediaDosUltimos(i, probabilidades) {
+function mediaDosUltimos(i, probabilidades, lista = historico) {
   // Guarda as probabilidades da caixa i e devolve a média dos últimos QUADROS_NA_MEDIA quadros
-  historico[i] = (historico[i] || []).concat([probabilidades]).slice(-QUADROS_NA_MEDIA);
+  // (lista = historico para os integrantes, historicoEmocao para as emoções)
+  lista[i] = (lista[i] || []).concat([probabilidades]).slice(-QUADROS_NA_MEDIA);
   return probabilidades.map((_, classe) =>
-    historico[i].reduce((soma, quadro) => soma + quadro[classe], 0) / historico[i].length);
+    lista[i].reduce((soma, quadro) => soma + quadro[classe], 0) / lista[i].length);
+}
+
+function textoDaEmocao(i, caixa, nomes) {
+  // A emoção mais provável da caixa i (média dos últimos quadros), ex.: "alegre (82%)"; vazio se não houver
+  if (!caixa.emocoes) return "";
+  const media = mediaDosUltimos(i, caixa.emocoes, historicoEmocao);
+  const melhor = media.indexOf(Math.max(...media));
+  return `${nomes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)`;
 }
 
 function desenharCaixas(resposta) {
   // Desenha o oval-guia de cada caixa com o nome e a confiança: verde se reconhecido, vermelho ("desconhecido") se
   // abaixo do limiar e cinza se a classe vencedora for "ninguem" (caixa vazia)
-  if (historico.length > resposta.caixas.length) historico = [];   // mudou de 2 para 1 pessoa: recomeça a média
+  if (historico.length > resposta.caixas.length) { historico = []; historicoEmocao = []; }   // de 2 para 1 pessoa: recomeça
   ctx.clearRect(0, 0, tela.width, tela.height);
   const tamanhoFonte = Math.round(tela.width / 28);
   ctx.font = `bold ${tamanhoFonte}px system-ui, sans-serif`;
@@ -156,6 +168,7 @@ function desenharCaixas(resposta) {
     const vazio = resposta.classes[melhor] === "ninguem";
     const texto = vazio ? "ninguém" : reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
     const cor = vazio ? "#6b7280" : reconhecido ? "#2ca02c" : "#d62728";
+    const emocao = vazio ? "" : textoDaEmocao(i, caixa, resposta.emocoes);   // sem pessoa, sem emoção
 
     // Se o vídeo está espelhado, espelhamos só a POSIÇÃO x da caixa; o texto continua desenhado normalmente
     const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x;
@@ -168,7 +181,14 @@ function desenharCaixas(resposta) {
     ctx.fillRect(x, caixa.y, ctx.measureText(texto).width + 16, tamanhoFonte * 1.5);  // fundo do texto
     ctx.fillStyle = "#ffffff";
     ctx.fillText(texto, x + 8, caixa.y + tamanhoFonte * 1.15);                        // nome + confiança
-    leitura.push(`Caixa ${i + 1}: ${texto}`);
+    if (emocao) {
+      const yEmocao = caixa.y + caixa.lado - tamanhoFonte * 1.5;                      // faixa embaixo do oval
+      ctx.fillStyle = "#7c3aed";
+      ctx.fillRect(x, yEmocao, ctx.measureText(emocao).width + 16, tamanhoFonte * 1.5);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(emocao, x + 8, yEmocao + tamanhoFonte * 1.15);                     // emoção + confiança
+    }
+    leitura.push(`Caixa ${i + 1}: ${texto}` + (emocao ? `, ${emocao}` : ""));
   });
   document.getElementById("leitura-ao-vivo").textContent = leitura.join(" · ");
   mostrarStatus(statusAoVivo, "Reconhecendo... posicione o rosto dentro do oval.");
@@ -195,7 +215,17 @@ async function verOQueARedeVe() {
       figura.querySelector("figcaption").textContent = titulos[i] || "Grad-CAM: onde a rede olhou";
       etapas.appendChild(figura);
     });
+    if (r.entrada_emocao) {                                         // o que o FER+ (emoção) recebe, à parte da CNN
+      const figura = document.createElement("figure");
+      figura.className = "entrada-emocao";
+      figura.innerHTML = `<img alt=""><figcaption>Entrada do FER+ (emoção): 64×64, mais fechada</figcaption>`;
+      figura.querySelector("img").src = r.entrada_emocao;
+      etapas.appendChild(figura);
+    }
     desenharBarras(document.getElementById("barras"), r.classes, r.probabilidades);
+    const barrasEmocao = document.getElementById("barras-emocao");
+    barrasEmocao.hidden = !r.probabilidades_emocao;                  // sem o modelo de emoções, esconde
+    if (r.probabilidades_emocao) desenharBarras(barrasEmocao.querySelector(".barras"), r.emocoes, r.probabilidades_emocao);
   } catch (erro) {
     etapas.innerHTML = "";
     const p = document.createElement("p");
@@ -224,4 +254,4 @@ limiar.addEventListener("input", () => {
 });
 espelhar.addEventListener("change", () => video.classList.toggle("espelhado", espelhar.checked));
 document.querySelectorAll('input[name="n_pessoas"]').forEach((opcao) =>
-  opcao.addEventListener("change", () => { historico = []; }));   // nova divisão da tela: recomeça a média
+  opcao.addEventListener("change", () => { historico = []; historicoEmocao = []; }));   // nova divisão da tela: recomeça a média

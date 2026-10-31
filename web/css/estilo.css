@@ -114,10 +114,12 @@ code { font-family: var(--fonte-codigo); font-size: 0.9em; background: var(--cod
 .visao-rede { margin-top: 24px; padding: 20px; background: var(--superficie); border: 1px solid var(--borda); border-radius: var(--raio); box-shadow: var(--sombra); }
 .visao-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .visao-topo h2 { margin: 0; font-size: 1.25rem; }
+.visao-rede h3 { margin: 18px 0 8px; font-size: 1rem; }
 .etapas { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin: 16px 0; }
 .etapas figure { margin: 0; text-align: center; }
 .etapas img { width: 100%; aspect-ratio: 1; object-fit: cover; image-rendering: pixelated; border-radius: 6px; border: 1px solid var(--borda); }
 .etapas figcaption { font-size: 0.85rem; color: var(--texto-suave); }
+.etapas .entrada-emocao img { border: 2px solid #7c3aed; }   /* roxo, a mesma cor da faixa de emoção */
 
 /* Barras de probabilidade */
 .barras { display: flex; flex-direction: column; gap: 6px; }

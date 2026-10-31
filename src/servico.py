@@ -15,12 +15,14 @@ from PIL import Image
 from src.config import CAMINHO_MODELO
 from src.dados import imagem_de_dataurl
 from src.preprocessamento import preprocessar
-from src.reconhecimento import carregar_modelo, reconhecer_quadro, criar_modelo_gradcam, grad_cam
+from src.reconhecimento import carregar_modelo, reconhecer_quadro, criar_modelo_gradcam, grad_cam, regioes_da_tela
+from src.emocao import EMOCOES, carregar_modelo_emocao, classificar_emocoes, entrada_emocao
 
 MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro."
 
 saida = sys.stdout          # canal exclusivo das respostas para o Node
 cache = {"data": None}      # modelo carregado na memória
+emocao = {}                 # modelo pronto de emoções (FER+), carregado uma vez
 
 
 def obter_modelo():
@@ -34,6 +36,18 @@ def obter_modelo():
     return cache
 
 
+def obter_emocao():
+    # Abre o FER+ só uma vez (ele não muda com o retreino da nossa CNN). Se não der para baixar (sem internet),
+    # o reconhecimento continua funcionando, só sem a emoção.
+    if "sessao" not in emocao:
+        try:
+            emocao["sessao"] = carregar_modelo_emocao()
+        except Exception as erro:
+            print(f"Sem modelo de emoções ({erro}); o site vai mostrar só o nome.")
+            emocao["sessao"] = None
+    return emocao["sessao"]
+
+
 def png_base64(matriz):
     # Converte uma matriz de pixels (0-255) em um PNG no formato dataURL, que o navegador exibe direto
     buffer = io.BytesIO()
@@ -43,15 +57,23 @@ def png_base64(matriz):
 
 def reconhecer(m, pedido):
     # Reconhecimento ao vivo: recorta o rosto de 1 ou 2 faixas fixas do quadro e devolve as probabilidades de cada uma
+    # e, à parte, as probabilidades de cada emoção (modelo pronto FER+, num quadrado mais fechado no mesmo rosto)
     quadro = imagem_de_dataurl(pedido["imagem"])
-    return {"caixas": reconhecer_quadro(m["model"], quadro, pedido["n_pessoas"]), "classes": m["classes"]}
+    caixas = reconhecer_quadro(m["model"], quadro, pedido["n_pessoas"])
+    if obter_emocao():
+        faixas = [quadro[:, x0:x0 + faixa] for x0, faixa in regioes_da_tela(quadro.shape[1], pedido["n_pessoas"])]
+        for caixa, probs in zip(caixas, classificar_emocoes(obter_emocao(), faixas)):
+            caixa["emocoes"] = probs.tolist()
+    return {"caixas": caixas, "classes": m["classes"], "emocoes": EMOCOES}
 
 
 def etapas(m, pedido):
-    # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM e a previsão
+    # Botão "Ver o que a rede vê": as etapas do pré-processamento, o Grad-CAM, a previsão
+    # e a imagem que o FER+ (emoção) recebe, para conferir o enquadramento
     quadro = imagem_de_dataurl(pedido["imagem"])
     entrada, imagens = preprocessar(quadro, mostrar_etapas=True)      # imagens = [original, 1, 2, 3, 4, 5]
     probs = m["model"](entrada[np.newaxis], training=False).numpy()[0]
+    emocoes = classificar_emocoes(obter_emocao(), [quadro])[0] if obter_emocao() else None   # modelo pronto
 
     # Grad-CAM: mapa de calor colorido (escala "jet") misturado com a imagem de entrada em cinza
     calor, _ = grad_cam(m["gradcam"], entrada)
@@ -64,6 +86,9 @@ def etapas(m, pedido):
         "gradcam": png_base64(mistura),
         "probabilidades": probs.tolist(),
         "classes": m["classes"],
+        "emocoes": EMOCOES,
+        "probabilidades_emocao": None if emocoes is None else emocoes.tolist(),
+        "entrada_emocao": png_base64(entrada_emocao(quadro)[0]) if obter_emocao() else None,   # 64x64 do FER+
     }
 
 
@@ -82,6 +107,7 @@ def main():
     sys.stdout = sys.stderr                # qualquer outro print (avisos do TensorFlow etc.) vai para o terminal,
                                            # e o stdout fica só para as respostas ao Node
     obter_modelo()                         # já carrega o modelo, para o primeiro pedido não demorar
+    obter_emocao()                         # e o de emoções (baixa ~35 MB na primeira vez)
     print("Python pronto para receber pedidos.")
     for linha in sys.stdin:                # espera pedidos até o Node fechar o processo
         pedido = json.loads(linha)

@@ -26,3 +26,12 @@ EPOCAS            = 60    # número máximo de passadas pelos dados de treino
 BATCH             = 32    # quantas fotos a rede vê antes de cada ajuste dos pesos
 SEED              = 42    # semente aleatória: garante o mesmo resultado a cada execução
 LIMIAR            = 0.6   # abaixo de 60% de confiança, a pessoa é "desconhecida"
+
+# Emoção (triste, alegre, bravo, com medo...): é a ÚNICA parte que usa um modelo pronto, o FER+ (Microsoft, formato
+# ONNX), como o trabalho permite. Quem é a pessoa continua sendo decidido só pela nossa CNN.
+CAMINHO_EMOCAO = os.path.join(MODELO_DIR, "emocao_ferplus.onnx")     # baixado sozinho no primeiro uso (~35 MB)
+URL_EMOCAO     = ("https://github.com/onnx/models/raw/main/validated/vision/body_analysis/"
+                  "emotion_ferplus/model/emotion-ferplus-8.onnx")
+TAMANHO_EMOCAO = 64       # o FER+ recebe um rosto 64 x 64 em tons de cinza
+FRACAO_EMOCAO  = 0.45     # quadrado mais fechado que o da CNN (0.6), no mesmo centro: o FER+ foi treinado com
+                          # rostos recortados da testa ao queixo. Só vale para a emoção; a CNN continua com FRACAO_ROSTO
