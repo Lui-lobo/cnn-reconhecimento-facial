@@ -199,7 +199,8 @@ function iniciarTreino() {
 // Começa um treino (só um por vez), depois de conferir se o dataset tem o mínimo necessário
 app.post("/api/treino", (req, res) => {
   if (treino.rodando) return res.status(409).json({ erro: "Já existe um treino em andamento." });
-  const integrantes = listarDataset().filter((i) => i.nome !== "ninguem");   // "ninguem" é a classe do fundo vazio
+  // "ninguem" é a classe do fundo vazio e "desconhecido" são pessoas de fora do grupo: não contam como integrantes
+  const integrantes = listarDataset().filter((i) => i.nome !== "ninguem" && i.nome !== "desconhecido");
   if (integrantes.length < 2) return res.status(400).json({ erro: "São necessários pelo menos 2 integrantes com fotos." });
   const comPoucas = integrantes.find((i) => i.fotos < MINIMO_FOTOS);
   if (comPoucas) return res.status(400).json({ erro: `${comPoucas.nome} tem só ${comPoucas.fotos} foto(s): o mínimo é ${MINIMO_FOTOS}.` });

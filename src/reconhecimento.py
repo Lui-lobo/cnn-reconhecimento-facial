@@ -1,19 +1,30 @@
 # Funções usadas pelo servidor para reconhecer quem está na webcam, e o Grad-CAM ("onde a rede olhou").
+import os
 import json
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from src.config import IMG_SIZE, CAMINHO_MODELO, CAMINHO_CLASSES
+from src.config import IMG_SIZE, CAMINHO_MODELO, CAMINHO_CLASSES, CAMINHO_LIMIAR, LIMIAR
 from src.preprocessamento import preprocessar, caixa_do_rosto
 
 
 def carregar_modelo():
-    # Lê do disco a CNN treinada e a lista com os nomes dos integrantes (na ordem dos rótulos)
-    model = keras.models.load_model(CAMINHO_MODELO)
+    # Lê do disco a CNN treinada e a lista com os nomes dos integrantes (na ordem dos rótulos).
+    # compile=False: aqui a rede só faz previsões, então não precisa do erro e da métrica usados no treino.
+    model = keras.models.load_model(CAMINHO_MODELO, compile=False)
     with open(CAMINHO_CLASSES, encoding="utf-8") as f:
         classes = json.load(f)
     return model, classes
+
+
+def carregar_limiar():
+    # Limiar de confiança escolhido pelo último treino (abaixo dele, a pessoa é "desconhecida").
+    # Um modelo treinado antes de essa escolha existir não tem o arquivo: vale o padrão do config.
+    if not os.path.exists(CAMINHO_LIMIAR):
+        return LIMIAR
+    with open(CAMINHO_LIMIAR, encoding="utf-8") as f:
+        return json.load(f)["limiar"]
 
 
 def regioes_da_tela(largura, n_pessoas):

@@ -29,14 +29,16 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 ├── servidor.js             servidor Node (Express): site, rotas da API e ponte com o Python
 ├── package.json            dependência do Node (express)
 ├── dataset/<nome>/         fotos de cada integrante (o nome da pasta é o rótulo)
-├── modelo/                 gerado pelo treino: modelo_cnn.keras, classes.json, resultados.json
+├── rostos_de_fora/         1500 fotos públicas de pessoas de fora do grupo (ensinam a rede a reconhecer um desconhecido)
+├── modelo/                 gerado pelo treino: modelo_cnn.keras, classes.json, limiar.json, resultados.json
 ├── src/
 │   ├── config.py           todos os parâmetros (IMG_SIZE, EPOCAS, BATCH, SEED, LIMIAR...)
-│   ├── dados.py            ler_imagem (com correção EXIF), listar_dataset, imagem_de_dataurl
+│   ├── dados.py            ler_imagem (com correção EXIF), listar_dataset, listar_rostos_de_fora, imagem_de_dataurl
 │   ├── preprocessamento.py recorte_rosto, para_cinza, redimensionar, equalizar_histograma, mascara_oval, preprocessar
 │   ├── divisao.py          treino/validação/teste por blocos de fotos seguidas
 │   ├── ninguem.py          classe "ninguém": recortes de fundo usados como exemplos de câmera vazia
-│   ├── aumento.py          aumentar (espelho, deslocamento, máscara encolhida, contraste, brilho, ruído)
+│   ├── desconhecidos.py    desconhecidos: alvo "em dúvida" para os rostos de fora e escolha do limiar de confiança
+│   ├── aumento.py          aumentar (espelho, deslocamento, máscara encolhida, contraste, brilho, ruído), variar_cena, colar_no_cenario
 │   ├── modelo.py           construir_cnn
 │   ├── metricas.py         matriz de confusão, VP/FP/FN/VN, precisão, recall, F1, especificidade, acurácia
 │   ├── visualizacoes.py    imagens intermediárias em PNG
@@ -100,6 +102,9 @@ Dicas para a rede aprender o rosto, e não o fundo:
 - (opcional, mas ajuda muito) coletem fotos com o nome **`ninguem`**, com a câmera apontada para os lugares vazios
   (cadeira, parede). Elas viram a classe “ninguém”, que a rede responde quando não há pessoa no oval. Mesmo sem
   essa pasta, o treino cria exemplos de “ninguém” a partir do fundo das fotos dos integrantes;
+- (opcional) coletem fotos de **pessoas de fora do grupo** (amigos, familiares) com o nome **`desconhecido`**, no mesmo
+  lugar das fotos de vocês. Elas não viram uma classe: juntam-se aos rostos públicos de `rostos_de_fora/`
+  (veja [Desconhecidos](#desconhecidos));
 - juntem **cerca de 150 a 300 fotos por pessoa**, em **quantidades parecidas** entre as pessoas;
 - nomes de pasta só com letras minúsculas sem acento, números, `_` ou `-` (pastas que começam com `.` ou `_` são ignoradas).
 
@@ -117,16 +122,19 @@ coleta”** no passo 1, o treino começa sozinho quando as fotos são salvas. Se
 python -m src.treinar
 ```
 
-O script faz, na ordem: leitura → pré-processamento (recorte do rosto e máscara oval) → divisão em
-treino/validação/teste (por blocos de fotos seguidas) + exemplos de “ninguém” → aumento de dados → montagem da CNN
-→ treino (até 60 épocas, com EarlyStopping) → avaliação no teste e teste de troca de fundo → imagens intermediárias. No fim, imprime as métricas no terminal e salva:
+O script faz, na ordem: leitura (fotos dos integrantes e rostos de fora do grupo) → pré-processamento (recorte do
+rosto e máscara oval) → divisão em treino/validação/teste (por blocos de fotos seguidas) + exemplos de “ninguém” →
+aumento de dados → montagem da CNN → treino (até 60 épocas, com EarlyStopping) → avaliação no teste, teste de troca de
+fundo e escolha do limiar de “desconhecido” → imagens intermediárias. Com os 1500 rostos de fora, o treino sem GPU
+leva em torno de 10 minutos. No fim, imprime as métricas no terminal e salva:
 
 | Arquivo | Conteúdo |
 |---|---|
 | `modelo/modelo_cnn.keras` | a rede treinada |
 | `modelo/classes.json` | os nomes dos integrantes, na ordem dos rótulos |
-| `modelo/resultados.json` | métricas, matriz de confusão, histórico do treino, divisão dos dados e camadas |
-| `web/img/resultados/*.png` | fotos originais, etapas do pré-processamento, aumento, curvas, matriz, métricas, erros, mapas de características, Grad-CAM e teste de troca de fundo |
+| `modelo/limiar.json` | o limiar de confiança escolhido pelo treino (abaixo dele, “desconhecido”) |
+| `modelo/resultados.json` | métricas, matriz de confusão, histórico do treino, divisão dos dados, camadas e o teste dos desconhecidos |
+| `web/img/resultados/*.png` | fotos originais, etapas do pré-processamento, aumento, curvas, matriz, métricas, erros, mapas de características, Grad-CAM, teste de troca de fundo e confiança para integrantes × rostos de fora |
 
 Sempre que coletarem fotos novas, rodem o treino de novo. O servidor percebe o modelo novo sozinho (não precisa reiniciar).
 
@@ -143,11 +151,40 @@ O navegador só libera a webcam em `localhost` ou em HTTPS, por isso o servidor 
 - **1 pessoa:** o oval central é o mesmo recorte e a mesma máscara das fotos de treino (é quando a rede funciona melhor).
 - **2 pessoas:** a tela é dividida em duas faixas lado a lado, cada uma com o seu oval; cada pessoa fica dentro de um.
 - **Ninguém:** se a rede achar que o oval está vazio, ele fica cinza com “ninguém”.
-- **Limiar:** abaixo dele (padrão 60%), o oval fica vermelho com “desconhecido”.
+- **Limiar:** abaixo dele, o oval fica vermelho com “desconhecido”. O valor inicial é o que o treino escolheu
+  (veja [Desconhecidos](#desconhecidos)); o controle deslizante ajusta na hora, sem retreinar: subam se um estranho
+  for aceito, desçam se um integrante virar “desconhecido”.
 - **Emoção:** embaixo de cada oval com uma pessoa (reconhecida ou “desconhecido”) aparece, numa faixa roxa, a emoção
   mais provável: alegre, triste, bravo(a), com medo, neutro(a), surpreso(a), com nojo ou com desprezo (média dos últimos 5 quadros).
 - **Ver o que a rede vê:** congela o quadro e mostra as etapas do pré-processamento, o Grad-CAM, as probabilidades
   de cada integrante e as de cada emoção.
+
+### Desconhecidos
+
+O softmax sempre distribui 100% entre as classes que conhece. Treinada só com os integrantes, a rede dava o nome de
+um deles para **qualquer** rosto, quase sempre com perto de 100% de confiança: no teste em que um integrante fica de
+fora do treino, ele era aceito como membro em cerca de 80% das fotos, e nenhum limiar resolvia.
+
+A solução está em `src/desconhecidos.py`:
+
+- **Rostos de fora no treino.** A pasta `rostos_de_fora/` tem 1500 fotos públicas, cada uma de uma pessoa diferente
+  (do conjunto *Labeled Faces in the Wild*; detalhes em [`rostos_de_fora/LEIAME.md`](rostos_de_fora/LEIAME.md)). Fotos
+  coletadas com o nome `desconhecido` entram junto. São só **dados**: a CNN continua sendo treinada do zero.
+- **O alvo é a dúvida.** Esses rostos não ganham uma classe. Para eles, a rede é cobrada a dividir a resposta por
+  igual entre as classes; para os integrantes, a dar 100% na classe certa. Assim a confiança só fica alta para quem é
+  do grupo.
+- **Rostos de fora no nosso cenário.** No aumento de dados, cada rosto de fora é colado, em tamanho e posição
+  sorteados, sobre uma foto de “ninguém” (`colar_no_cenario`, em `src/aumento.py`). Sem isso a rede aprende o atalho
+  “foto de webcam = integrante”, porque as fotos públicas têm enquadramento e nitidez diferentes das nossas.
+- **O treino escolhe o limiar.** Nas fotos de validação, ele testa os limiares de 50% a 95% e fica com o que menos
+  erra (integrante rejeitado ou rosto de fora aceito). O valor vai para `modelo/limiar.json` e vira a posição inicial
+  do controle deslizante do site.
+
+No mesmo teste de deixar um integrante de fora, com o limiar escolhido pelo treino (75%), a aceitação caiu de cerca de
+80% para cerca de 5% em um caso e para 6–13% no outro (o mais difícil: uma pessoa pequena no quadro, no mesmo cômodo
+das fotos de treino; o resultado varia de um treino para outro). Uma classe `desconhecido` comum foi testada e
+descartada: a rede aprendia o atalho “foto de webcam = integrante” e ainda aceitava 71% em um dos casos. A seção 10 da documentação do site mostra o
+resultado do último treino (rostos de fora que a rede nunca viu).
 
 ### Emoção (modelo pronto)
 
@@ -203,19 +240,21 @@ pytest
 
 Testa o pré-processamento (formato `(96, 96, 1)` em `float32` entre 0 e 1, equalização sem NaN, recorte quadrado)
 e as métricas (VP/FP/FN/VN, precisão, recall, F1, especificidade e acurácia contra valores calculados à mão),
-além da entrada e do softmax da parte de emoção.
+além da entrada e do softmax da parte de emoção e da detecção de desconhecidos (alvo “em dúvida”, escolha do limiar
+e pastas).
 
 ## Regras do trabalho
 
 Não usamos bibliotecas auxiliares para o modelo nem para os tratamentos: nada de detector de rosto pronto
 (OpenCV, dlib, face_recognition, MediaPipe), modelo pré-treinado, transfer learning, `ImageDataGenerator`,
 camadas de aumento de dados do Keras ou scikit-learn. A única exceção, permitida pelo trabalho, é a **emoção**,
-que vem do modelo pronto FER+.
+que vem do modelo pronto FER+. As fotos públicas de `rostos_de_fora/` são apenas dados de treino: nenhum peso pronto
+é carregado na nossa CNN.
 
 | Etapa | Ferramenta |
 |---|---|
 | Abrir e salvar o arquivo .jpg/.png/.heic | `PIL` + `pillow-heif` para .heic (só transforma o arquivo em uma matriz de números) |
-| Recorte, tons de cinza, redimensionamento, equalização, aumento de dados, divisão dos dados | **código próprio com NumPy** |
+| Recorte, tons de cinza, redimensionamento, equalização, aumento de dados, divisão dos dados, alvo dos rostos de fora e escolha do limiar | **código próprio com NumPy** |
 | Montar e treinar a CNN | TensorFlow/Keras, **sem modelo pré-treinado** |
 | Matriz de confusão e métricas | **código próprio com NumPy** |
 | Emoção do rosto (só ela) | modelo **pronto** FER+ (ONNX) com `onnxruntime` |

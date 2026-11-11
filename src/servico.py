@@ -15,7 +15,8 @@ from PIL import Image
 from src.config import CAMINHO_MODELO
 from src.dados import imagem_de_dataurl
 from src.preprocessamento import preprocessar
-from src.reconhecimento import carregar_modelo, reconhecer_quadro, criar_modelo_gradcam, grad_cam, regioes_da_tela
+from src.reconhecimento import (carregar_modelo, carregar_limiar, reconhecer_quadro, criar_modelo_gradcam, grad_cam,
+                                regioes_da_tela)
 from src.emocao import EMOCOES, carregar_modelo_emocao, classificar_emocoes, entrada_emocao
 
 MSG_SEM_MODELO = "O modelo ainda não foi treinado: rode `python -m src.treinar` primeiro."
@@ -32,7 +33,8 @@ def obter_modelo():
     data = os.path.getmtime(CAMINHO_MODELO)
     if cache["data"] != data:
         model, classes = carregar_modelo()
-        cache.update(data=data, model=model, classes=classes, gradcam=criar_modelo_gradcam(model))
+        cache.update(data=data, model=model, classes=classes, gradcam=criar_modelo_gradcam(model),
+                     limiar=carregar_limiar())         # o limiar que o treino escolheu para este modelo
     return cache
 
 
@@ -64,7 +66,7 @@ def reconhecer(m, pedido):
         faixas = [quadro[:, x0:x0 + faixa] for x0, faixa in regioes_da_tela(quadro.shape[1], pedido["n_pessoas"])]
         for caixa, probs in zip(caixas, classificar_emocoes(obter_emocao(), faixas)):
             caixa["emocoes"] = probs.tolist()
-    return {"caixas": caixas, "classes": m["classes"], "emocoes": EMOCOES}
+    return {"caixas": caixas, "classes": m["classes"], "emocoes": EMOCOES, "limiar": m["limiar"]}
 
 
 def etapas(m, pedido):

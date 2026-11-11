@@ -34,12 +34,14 @@ async function atualizarDataset() {
     tabela.appendChild(linha);
   });
 
-  // Bloqueios (impedem o treino) e dicas (só avisam). A pasta "ninguem" (fundo vazio) não conta como integrante.
+  // Bloqueios (impedem o treino) e dicas (só avisam). As pastas "ninguem" (fundo vazio) e "desconhecido"
+  // (pessoas de fora do grupo) não contam como integrantes.
   bloqueios = [];
   const dicas = [];
-  const pessoas = integrantes.filter((i) => i.nome !== "ninguem");
+  const pessoas = integrantes.filter((i) => i.nome !== "ninguem" && i.nome !== "desconhecido");
   if (pessoas.length < 2) bloqueios.push("Colete fotos de pelo menos 2 integrantes.");
-  if (pessoas.length === integrantes.length) dicas.push("Opcional: colete também fotos com o nome “ninguem”, com a câmera apontada para o lugar vazio (cadeira, parede). A rede aprende a responder “ninguém”.");
+  if (!integrantes.some((i) => i.nome === "desconhecido")) dicas.push("Opcional: colete fotos de pessoas de fora do grupo (amigos, familiares) com o nome “desconhecido”. Elas se juntam aos rostos públicos que ensinam a rede a não confundir estranhos com integrantes.");
+  if (!integrantes.some((i) => i.nome === "ninguem")) dicas.push("Opcional: colete também fotos com o nome “ninguem”, com a câmera apontada para o lugar vazio (cadeira, parede). A rede aprende a responder “ninguém”.");
   pessoas.forEach((i) => {
     if (i.fotos < d.minimo_fotos) bloqueios.push(`${i.nome}: só ${i.fotos} foto(s); o mínimo é ${d.minimo_fotos}.`);
     else if (i.fotos < RECOMENDADO) dicas.push(`${i.nome}: ${i.fotos} fotos. O recomendado é ${RECOMENDADO} ou mais, em sessões diferentes.`);

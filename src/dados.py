@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from pillow_heif import register_heif_opener
 
-from src.config import DATASET_DIR
+from src.config import DATASET_DIR, ROSTOS_DE_FORA_DIR, PASTA_DESCONHECIDO
 
 register_heif_opener()    # ensina o PIL a abrir fotos .heic/.heif (formato padrão do iPhone)
 
@@ -29,8 +29,9 @@ def ler_imagem(caminho):
 def listar_dataset(pasta=DATASET_DIR):
     # Percorre as pastas e devolve: nomes dos integrantes, caminho de cada foto e o número da pessoa (0, 1, 2...).
     # Cada subpasta é um integrante (ignoramos pastas ocultas e de sistema, que começam com "." ou "_").
+    # A pasta "desconhecido" também fica de fora: são pessoas de fora do grupo (ver listar_rostos_de_fora).
     classes = sorted(p for p in os.listdir(pasta)
-                     if os.path.isdir(os.path.join(pasta, p)) and p[0] not in "._")
+                     if os.path.isdir(os.path.join(pasta, p)) and p[0] not in "._" and p != PASTA_DESCONHECIDO)
     caminhos, rotulos = [], []
     for numero, nome in enumerate(classes):
         subpasta = os.path.join(pasta, nome)
@@ -39,6 +40,17 @@ def listar_dataset(pasta=DATASET_DIR):
                 caminhos.append(os.path.join(subpasta, arquivo))
                 rotulos.append(numero)
     return classes, caminhos, np.array(rotulos)
+
+
+def listar_rostos_de_fora(pasta=DATASET_DIR):
+    # Caminhos das fotos de pessoas de FORA do grupo: os rostos públicos de rostos_de_fora/ (uma foto por pessoa)
+    # e, se existir, a pasta dataset/desconhecido/ (amigos e familiares fotografados na webcam, pelo site).
+    caminhos = []
+    for origem in [ROSTOS_DE_FORA_DIR, os.path.join(pasta, PASTA_DESCONHECIDO)]:
+        if os.path.isdir(origem):
+            caminhos += [os.path.join(origem, arquivo) for arquivo in sorted(os.listdir(origem))
+                         if arquivo.lower().endswith(EXTENSOES)]
+    return caminhos
 
 
 def imagem_de_dataurl(texto):

@@ -1,6 +1,7 @@
 // Reconhecimento ao vivo pela webcam.
 // Ciclo: captura um quadro -> envia ao servidor (/api/reconhecer) -> recebe as probabilidades de cada caixa
 // -> faz a média dos últimos 5 quadros -> desenha as caixas com o nome sobre o vídeo -> repete (~4 vezes por segundo).
+// Se a confiança média ficar abaixo do limiar (sugerido pelo treino, ajustável no controle), a caixa mostra "desconhecido".
 // Embaixo de cada oval aparece também a emoção (alegre, triste, bravo, com medo...), vinda do modelo pronto FER+.
 
 const INTERVALO_MS = 250;      // tempo mínimo entre dois quadros enviados
@@ -21,6 +22,7 @@ let ligado = false;       // o loop de reconhecimento está rodando?
 let congelado = false;    // true enquanto o painel "Ver o que a rede vê" está aberto
 let historico = [];       // historico[i] = probabilidades dos últimos quadros da caixa i
 let historicoEmocao = []; // o mesmo, para as probabilidades das emoções
+let limiarDoModelo = null; // último limiar sugerido pelo treino que já foi aplicado ao controle deslizante
 
 // ---------- Funções auxiliares (também usadas por coleta.js) ----------
 
@@ -151,9 +153,19 @@ function textoDaEmocao(i, caixa, nomes) {
   return `${nomes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)`;
 }
 
+function usarLimiarDoModelo(valor) {
+  // O treino escolhe o limiar que melhor separa os integrantes dos rostos de fora do grupo. Quando chega um modelo
+  // novo (ou ao abrir a página), o controle deslizante vai para esse valor; depois disso, vale o ajuste manual.
+  if (!valor || valor === limiarDoModelo) return;
+  limiarDoModelo = valor;
+  limiar.value = Math.round(valor * 100);
+  document.getElementById("limiar-valor").textContent = limiar.value + "%";
+}
+
 function desenharCaixas(resposta) {
-  // Desenha o oval-guia de cada caixa com o nome e a confiança: verde se reconhecido, vermelho ("desconhecido") se
-  // abaixo do limiar e cinza se a classe vencedora for "ninguem" (caixa vazia)
+  // Desenha o oval-guia de cada caixa com o nome e a confiança: verde se reconhecido, cinza se a rede tem certeza de
+  // que a caixa está vazia ("ninguem") e vermelho ("desconhecido") se a confiança ficou abaixo do limiar
+  usarLimiarDoModelo(resposta.limiar);
   if (historico.length > resposta.caixas.length) { historico = []; historicoEmocao = []; }   // de 2 para 1 pessoa: recomeça
   ctx.clearRect(0, 0, tela.width, tela.height);
   const tamanhoFonte = Math.round(tela.width / 28);
@@ -165,7 +177,7 @@ function desenharCaixas(resposta) {
     const media = mediaDosUltimos(i, caixa.probabilidades);
     const melhor = media.indexOf(Math.max(...media));
     const reconhecido = media[melhor] >= limiar.value / 100;
-    const vazio = resposta.classes[melhor] === "ninguem";
+    const vazio = resposta.classes[melhor] === "ninguem" && reconhecido;   // "ninguém" em dúvida também é desconhecido
     const texto = vazio ? "ninguém" : reconhecido ? `${resposta.classes[melhor]} (${(media[melhor] * 100).toFixed(0)}%)` : "desconhecido";
     const cor = vazio ? "#6b7280" : reconhecido ? "#2ca02c" : "#d62728";
     const emocao = vazio ? "" : textoDaEmocao(i, caixa, resposta.emocoes);   // sem pessoa, sem emoção

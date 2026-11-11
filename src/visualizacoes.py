@@ -58,7 +58,7 @@ def etapas_preprocessamento(classes, caminhos, rotulos):
     salvar("preprocessamento")
 
 
-def exemplos_aumento(classes, X_treino, X_distancia, y_treino, indice_ninguem):
+def exemplos_aumento(classes, X_treino, X_distancia, y_treino, indice_ninguem, indice_fora=None):
     # A mesma foto de treino modificada 6 vezes pelo aumento de dados (distância, troca de entorno e aumentar)
     fig, eixos = plt.subplots(len(classes), 7, figsize=(13, 2 * len(classes)), squeeze=False)
     for linha in range(len(classes)):
@@ -66,7 +66,7 @@ def exemplos_aumento(classes, X_treino, X_distancia, y_treino, indice_ninguem):
         eixos[linha, 0].imshow(X_treino[i][:, :, 0], cmap="gray", vmin=0, vmax=1)
         eixos[linha, 0].set_title(f"{classes[linha]} (original)", fontsize=9)
         for coluna in range(1, 7):
-            copia = aumentar(variar_cena(i, X_treino, X_distancia, y_treino, indice_ninguem))
+            copia = aumentar(variar_cena(i, X_treino, X_distancia, y_treino, indice_ninguem, indice_fora))
             eixos[linha, coluna].imshow(copia[:, :, 0], cmap="gray", vmin=0, vmax=1)
             eixos[linha, coluna].set_title(f"aumentada {coluna}", fontsize=9)
     for ax in eixos.ravel():
@@ -181,6 +181,26 @@ def gradcam_por_integrante(model, X_teste, y_teste, classes):
         ax.axis("off")
     plt.tight_layout()
     salvar("gradcam")
+
+
+def grafico_desconhecidos(desconhecidos, conf_membros, conf_fora):
+    # Histograma da confiança da rede nas fotos de teste: integrantes (deve ficar perto de 100%) e rostos de fora
+    # do grupo (deve ficar baixa). A linha tracejada é o limiar escolhido: à esquerda dela, "desconhecido".
+    faixas = np.linspace(0, 1, 26)
+    plt.figure(figsize=(9, 3.6))
+    plt.hist(conf_fora, bins=faixas, alpha=0.75, color="#d62728", label="rostos de fora do grupo",
+             weights=np.full(len(conf_fora), 1 / max(len(conf_fora), 1)))
+    plt.hist(conf_membros, bins=faixas, alpha=0.75, color="#2ca02c", label="integrantes",
+             weights=np.full(len(conf_membros), 1 / max(len(conf_membros), 1)))
+    plt.axvline(desconhecidos["limiar"], color="black", linestyle="--", label=f"limiar ({desconhecidos['limiar']:.0%})")
+    plt.gca().xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+    plt.gca().yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1.0))
+    plt.xlabel("confiança da rede no integrante mais provável")
+    plt.ylabel("fração das fotos de teste")
+    plt.title("Confiança: integrantes x rostos de fora do grupo (teste)")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    salvar("desconhecidos")
 
 
 def grafico_troca_de_fundo(troca, X_teste, y_teste, classes):

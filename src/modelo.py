@@ -1,9 +1,30 @@
 # Montagem da CNN com a API funcional do Keras, treinada DO ZERO (sem modelo pré-treinado).
 # Arquitetura igual à do notebook: 4 blocos convolução + pooling, dropout, densa e softmax.
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
 from src.config import IMG_SIZE
+
+
+class AcuraciaComResposta(keras.metrics.Metric):
+    # Acurácia só das fotos que têm resposta certa (integrantes e "ninguém"). Os rostos de fora do grupo têm o alvo
+    # dividido por igual entre as classes (ver src/desconhecidos.py), então não existe "acerto" para eles.
+    # Soma acertos e fotos ao longo da época inteira (um lote só com rostos de fora não entra na conta).
+    # O nome "accuracy" mantém as chaves "accuracy" e "val_accuracy" do histórico do Keras.
+    def __init__(self, name="accuracy", **opcoes):
+        super().__init__(name=name, **opcoes)
+        self.acertos = self.add_variable(shape=(), initializer="zeros", name="acertos")
+        self.fotos = self.add_variable(shape=(), initializer="zeros", name="fotos")
+
+    def update_state(self, alvo, previsto, sample_weight=None):
+        tem_resposta = tf.reduce_max(alvo, axis=-1) > 0.99
+        acertou = tf.equal(tf.argmax(alvo, axis=-1), tf.argmax(previsto, axis=-1))
+        self.acertos.assign_add(tf.reduce_sum(tf.cast(acertou & tem_resposta, tf.float32)))
+        self.fotos.assign_add(tf.reduce_sum(tf.cast(tem_resposta, tf.float32)))
+
+    def result(self):
+        return self.acertos / tf.maximum(self.fotos, 1.0)
 
 
 def construir_cnn(n_classes):
@@ -31,7 +52,7 @@ def construir_cnn(n_classes):
     model = keras.Model(entrada, saida)
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=0.001),   # algoritmo que ajusta os pesos
-        loss="sparse_categorical_crossentropy",                 # erro: entropia cruzada (rótulos como 0, 1, 2...)
-        metrics=["accuracy"],                                   # acompanha a acurácia durante o treino
+        loss="categorical_crossentropy",                        # erro: entropia cruzada (alvo = 1 probabilidade por classe)
+        metrics=[AcuraciaComResposta()],                           # acurácia durante o treino (só das fotos com resposta certa)
     )
     return model

@@ -47,7 +47,7 @@
       <label class="campo" for="limiar">
         <span>Limiar de confiança: <strong><output id="limiar-valor">60%</output></strong></span>
         <input type="range" id="limiar" min="30" max="95" step="5" value="60">
-        <small>Abaixo dele, a caixa mostra “desconhecido”.</small>
+        <small>Abaixo dele, a caixa mostra “desconhecido”. O valor inicial é o que o treino escolheu.</small>
       </label>
 
       <label class="campo linha"><input type="checkbox" id="espelhar" checked> Mostrar o vídeo espelhado</label>
@@ -184,7 +184,7 @@
         <ol class="fluxo">
           <li>Foto da webcam<small>dataset/&lt;nome&gt;/</small></li>
           <li>Pré-processamento<small>rosto, oval, 96×96, cinza</small></li>
-          <li>Divisão<small>treino · validação · teste + “ninguém”</small></li>
+          <li>Divisão<small>treino · validação · teste + “ninguém” + rostos de fora</small></li>
           <li>Aumento<small>só no treino</small></li>
           <li>CNN<small>4 convoluções</small></li>
           <li>Treino<small>Adam + EarlyStopping</small></li>
@@ -205,7 +205,7 @@
           <thead><tr><th>Etapa</th><th>Ferramenta</th></tr></thead>
           <tbody>
             <tr><td>Abrir e salvar o arquivo .jpg/.png/.heic</td><td><code>PIL</code> + <code>pillow-heif</code> para .heic (só transforma o arquivo em uma matriz de números)</td></tr>
-            <tr><td>Recorte do rosto, tons de cinza, redimensionamento, equalização, máscara oval, aumento de dados, divisão dos dados, exemplos de “ninguém”, teste de troca de fundo</td><td><strong>código próprio com NumPy</strong></td></tr>
+            <tr><td>Recorte do rosto, tons de cinza, redimensionamento, equalização, máscara oval, aumento de dados, divisão dos dados, exemplos de “ninguém”, alvo “em dúvida” dos rostos de fora e escolha do limiar, teste de troca de fundo</td><td><strong>código próprio com NumPy</strong></td></tr>
             <tr><td>Montar e treinar a CNN</td><td>TensorFlow/Keras, <strong>sem modelo pré-treinado</strong></td></tr>
             <tr><td>Emoção do rosto (só ela)</td><td>modelo <strong>pronto</strong> FER+ (ONNX), executado com <code>onnxruntime</code></td></tr>
             <tr><td>Matriz de confusão e métricas</td><td><strong>código próprio com NumPy</strong></td></tr>
@@ -301,6 +301,10 @@
           <li><strong>Fotos de “ninguém” (opcional, mas ajuda muito):</strong> coletem fotos com o nome <code>ninguem</code>,
             com a câmera apontada para os lugares vazios (a cadeira, a parede, a cama). Elas ensinam a rede a responder
             “ninguém” quando não há pessoa no oval. Mesmo sem elas, o treino cria exemplos de fundo sozinho (seção 5).</li>
+          <li><strong>Fotos de “desconhecido” (opcional):</strong> coletem fotos de pessoas de fora do grupo (amigos,
+            familiares) com o nome <code>desconhecido</code>, no mesmo lugar das fotos de vocês. Elas não viram uma classe:
+            juntam-se aos rostos públicos da pasta <code>rostos_de_fora/</code>, que ensinam a rede a ficar em dúvida
+            diante de um estranho (seção 5).</li>
         </ul>
         <p class="destaque"><strong>Um erro de rótulo que aconteceu de verdade.</strong> Para testar um objeto não humano,
           treinamos também a classe <code>bolotas</code> (um urso de pelúcia). Ao vivo, quando o Luiz chegava perto da câmera,
@@ -520,6 +524,49 @@
             </details>
           </li>
         </ol>
+        <h3>Rostos de fora do grupo: a rede aprende a ficar em dúvida</h3>
+        <p>O mesmo problema do softmax vale para pessoas: treinada só com os integrantes, a rede respondia o nome de um
+          deles para <strong>qualquer</strong> rosto, quase sempre com perto de 100% de confiança. Medimos isso deixando um
+          integrante de fora do treino: a rede o aceitou como membro em cerca de 80% das fotos, mesmo com o limiar de 60%.
+          Nenhum limiar resolve se a confiança para um estranho é igual à de um integrante.</p>
+        <ol class="passos">
+          <li><strong>Exemplos de gente de fora.</strong> A pasta <code>rostos_de_fora/</code> tem 1500 fotos públicas, cada
+            uma de uma pessoa diferente (do conjunto <em>Labeled Faces in the Wild</em>). Fotos coletadas pelo site com o
+            nome <code>desconhecido</code> entram junto. Todas passam pelo mesmo pré-processamento e são divididas em
+            treino, validação e teste, como se fossem mais uma pasta.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="dados/listar_rostos_de_fora"></pre>
+              <ol class="notas">
+                <li data-trecho="for origem in [ROSTOS_DE_FORA_DIR">As duas origens: os rostos públicos e a pasta opcional <code>dataset/desconhecido/</code>.</li>
+                <li data-trecho="caminhos += [">Junta os caminhos das fotos, em ordem alfabética.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Sem classe própria: o alvo é a dúvida.</strong> Para um integrante, a resposta certa é 100% na classe
+            dele. Para um rosto de fora, cobramos que a resposta fique <strong>dividida por igual</strong> entre as classes
+            (com 4 classes, 25% para cada). A rede continua com uma saída por classe e é treinada do zero; o que muda é
+            que ela aprende a só ter confiança alta para quem é do grupo.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="desconhecidos/alvos"></pre>
+              <ol class="notas">
+                <li data-trecho="alvo = np.full((len(y), n_classes), 1.0 / n_classes">Começa com todas as fotos “em dúvida”: a mesma probabilidade para cada classe.</li>
+                <li data-trecho="com_dono = y < n_classes">As fotos de integrantes e de “ninguém” (os rostos de fora têm um rótulo além das classes).</li>
+                <li data-trecho="np.eye(n_classes">Para elas, o alvo é 1 na classe certa e 0 nas outras.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>O limiar é escolhido pelo treino.</strong> Depois de treinar, comparamos nas fotos de validação a
+            confiança da rede para os integrantes e para os rostos de fora, e ficamos com o limiar que menos erra
+            (seção 10). Ele vira o valor inicial do controle deslizante do site.</li>
+        </ol>
+        <p class="destaque"><strong>Por que não uma classe “desconhecido”?</strong> Testamos. A rede aprendeu um atalho:
+          “foto com cara de webcam é integrante, foto com cara de banco público é desconhecido”, e continuou aceitando o
+          integrante deixado de fora em 71% das fotos. Com o alvo “em dúvida”, os rostos de fora colados no nosso cenário
+          (seção 6) e o limiar escolhido pelo treino, o mesmo teste ficou em cerca de 5% em um caso e entre 6% e 13% no
+          mais difícil.</p>
+
         <h3>A classe “ninguém”</h3>
         <p>O softmax sempre distribui 100% entre as classes que conhece. Se só existirem os integrantes, a rede é obrigada a
           escolher um deles até para uma cadeira vazia. Por isso existe uma classe extra, <code>ninguem</code>, com exemplos
@@ -582,10 +629,33 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-codigo="aumento/variar_cena"></pre>
               <ol class="notas">
+                <li data-trecho="if y[i] == indice_fora and np.random.rand() < 0.75:">Rosto de fora do grupo: em 75% das cópias...</li>
+                <li data-trecho="return colar_no_cenario(">...é colado sobre uma foto de “ninguém”, com tamanho e posição sorteados (passo 3).</li>
                 <li data-trecho="img = X_distancia[i] if np.random.rand() < 0.5 else X[i]">Metade das vezes, parte da versão “de outra distância” da foto.</li>
                 <li data-trecho="if y[i] != indice_ninguem and np.random.rand() < 0.5:">Metade das vezes (e só se a foto for de um integrante)...</li>
                 <li data-trecho="outra = np.random.choice(np.where(y != y[i])[0])">...sorteia uma foto de qualquer outra classe...</li>
                 <li data-trecho="img = trocar_fundo(img, X[outra])">...e junta o rosto desta foto com o entorno da outra (a mesma função do teste da seção 10).</li>
+              </ol>
+            </details>
+          </li>
+        </ol>
+        <ol class="passos" start="3">
+          <li><strong>Rostos de fora no nosso cenário (75% de chance, só para os rostos de fora do grupo):</strong> as fotos
+            públicas têm “cara” diferente das fotos da nossa webcam (enquadramento, nitidez, fundo). Sem cuidado, a rede
+            aprende o atalho “foto de webcam = integrante” e aceita qualquer estranho que apareça na frente da câmera.
+            Por isso o rosto de fora é encolhido para um tamanho sorteado e colado sobre uma foto de “ninguém”, o cenário
+            vazio das nossas fotos: é assim que um estranho apareceria ao vivo. No teste de deixar um integrante de fora
+            do treino, isso reduziu de 15–41% para 6–13% as fotos em que ele era aceito no caso mais difícil (no outro
+            caso, que já era baixo, ficou em cerca de 5%).
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="aumento/colar_no_cenario"></pre>
+              <ol class="notas">
+                <li data-trecho="n = max(8, int(round(IMG_SIZE * escala)))">O novo tamanho do rosto: de 50% a 100% da imagem.</li>
+                <li data-trecho="pequeno = rosto[indices][:, indices]">Encolhe pegando o pixel correspondente (vizinho mais próximo).</li>
+                <li data-trecho="m = mascara_oval(n, escala=0.9)">Só o oval do rosto é colado, com a borda suave.</li>
+                <li data-trecho="saida[topo:topo + n, esquerda:esquerda + n] = ">Mistura o rosto com o cenário vazio naquela região.</li>
+                <li data-trecho="oval = mascara_oval(IMG_SIZE)">Fora do oval da entrada, continua o cinza neutro de todas as fotos.</li>
               </ol>
             </details>
           </li>
@@ -691,7 +761,8 @@
                 <li data-trecho="layers.Dense(n_classes">Passo 7: uma pontuação por integrante (sem ativação).</li>
                 <li data-trecho="layers.Softmax(">Passo 7: o softmax transforma as pontuações em probabilidades.</li>
                 <li data-trecho="learning_rate=0.001">O otimizador Adam, que ajusta os pesos no treino (seção 8).</li>
-                <li data-trecho='loss="sparse_categorical_crossentropy"'>A medida de erro: entropia cruzada, com os rótulos como números 0, 1, 2...</li>
+                <li data-trecho='loss="categorical_crossentropy"'>A medida de erro: entropia cruzada. O alvo de cada foto é uma probabilidade por classe (seção 5).</li>
+                <li data-trecho="metrics=[AcuraciaComResposta()]">A acurácia acompanhada no treino conta só as fotos que têm classe certa (os rostos de fora não têm).</li>
               </ol>
             </details>
           </li>
@@ -766,15 +837,18 @@
             <li data-trecho="classes, caminhos, rotulos = listar_dataset(">Etapa 1: leitura das pastas (seção 3).</li>
             <li data-trecho="X.append(preprocessar(img))">Etapa 2: pré-processa todas as fotos (seção 4)...</li>
             <li data-trecho="fundos.append(preprocessar(recorte_de_fundo(img, gerador)))">...e tira de cada uma um recorte de fundo para a classe “ninguém” (seção 5).</li>
-            <li data-trecho="dividir_dados(y, classes)">Etapa 3: divisão em treino, validação e teste (seção 5).</li>
+            <li data-trecho="caminhos_fora = listar_rostos_de_fora(">Lista também os rostos de fora do grupo (seção 5).</li>
+            <li data-trecho="idx_treino, idx_val, idx_teste = dividir_dados(">Etapa 3: divisão em treino, validação e teste (seção 5).</li>
             <li data-trecho="X_treino, y_treino = adicionar_ninguem(">Junta a cada conjunto os recortes de fundo das suas próprias fotos, com o rótulo “ninguém”.</li>
             <li data-trecho="montar_treino_aumentado(X_treino, X_distancia_treino">Etapa 4: aumento de dados (seção 6).</li>
             <li data-trecho="model = construir_cnn(len(classes))">Etapa 5: monta a CNN (seção 7).</li>
-            <li data-trecho="historico = treinar_rede(">Etapa 6: treina (esta seção).</li>
+            <li data-trecho="historico = treinar_rede(">Etapa 6: treina (esta seção). O <code>alvos</code> transforma os rótulos em probabilidades por classe.</li>
             <li data-trecho="y_previsto = model.predict(X_teste">Etapa 7: avaliação no teste (seção 9).</li>
             <li data-trecho="troca = teste_troca_de_fundo(">Teste de troca de fundo: a rede segue o rosto ou o cenário? (seção 10).</li>
+            <li data-trecho="desconhecidos, conf_membros, conf_fora = avaliar_desconhecidos(">Escolhe o limiar e mede a rejeição de rostos de fora (seção 10).</li>
             <li data-trecho="visualizacoes.curvas_treino(historico)">Etapa 8: gera as imagens desta página.</li>
             <li data-trecho="json.dump(classes, f">Grava os nomes dos integrantes antes do modelo (o servidor troca de modelo quando o arquivo muda).</li>
+            <li data-trecho='json.dump({"limiar"'>Grava o limiar escolhido, usado pelo reconhecimento ao vivo.</li>
             <li data-trecho="model.save(CAMINHO_MODELO)">Grava a rede treinada em <code>modelo/modelo_cnn.keras</code>.</li>
             <li data-trecho="json.dump(resultados, f">Grava as métricas e o histórico em <code>resultados.json</code>, lido por esta página.</li>
           </ol>
@@ -1027,6 +1101,50 @@
           <img data-resultado="troca_de_fundo" alt="Um exemplo de imagem montada e o resultado do teste de troca de fundo">
           <figcaption>Um exemplo de imagem montada e o resultado do teste de troca de fundo no último treino.</figcaption>
         </figure>
+
+        <h3>Teste dos desconhecidos: a rede fica em dúvida com quem é de fora?</h3>
+        <p>Os rostos de fora do grupo reservados para o teste são de pessoas que a rede <strong>nunca viu</strong>. Para
+          cada foto, olhamos a confiança da rede no integrante mais provável:</p>
+        <ol class="passos">
+          <li><strong>Escolher o limiar na validação.</strong> Testamos os limiares de 50% a 95% e contamos dois erros:
+            integrante rejeitado (confiança abaixo do limiar) e rosto de fora aceito. Fica o limiar que menos erra; quando
+            vários empatam, o do meio, que deixa folga para os dois lados.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="desconhecidos/escolher_limiar"></pre>
+              <ol class="notas">
+                <li data-trecho="erros = [">Para cada limiar: fração de integrantes rejeitados + fração de rostos de fora aceitos.</li>
+                <li data-trecho="empatados = [">Os limiares com o menor erro.</li>
+                <li data-trecho="return empatados[len(empatados) // 2]">Fica com o do meio.</li>
+              </ol>
+            </details>
+          </li>
+          <li><strong>Medir no teste.</strong> Com esse limiar, contamos quantas fotos de integrantes continuam aceitas e
+            quantos rostos de fora são rejeitados.
+            <details class="no-codigo">
+              <summary>Ver no código</summary>
+              <pre class="codigo" data-codigo="desconhecidos/avaliar_desconhecidos"></pre>
+              <ol class="notas">
+                <li data-trecho="conf_membros = probs[">Integrantes: a confiança da rede na pessoa certa.</li>
+                <li data-trecho="conf_fora = confianca_como_membro(">Rostos de fora: a maior confiança dada a um integrante.</li>
+                <li data-trecho="limiar = escolher_limiar(">O limiar sai das fotos de validação...</li>
+                <li data-trecho="conf_membros, conf_fora = confiancas(X_teste">...e é medido nas de teste.</li>
+                <li data-trecho='"membros_aceitos": float('>Quanto maior, melhor: integrantes que continuam reconhecidos.</li>
+                <li data-trecho='"fora_rejeitados": float('>Quanto maior, melhor: estranhos que viram “desconhecido”.</li>
+              </ol>
+            </details>
+          </li>
+        </ol>
+        <div class="numeros dinamico" id="info-desconhecidos"></div>
+        <figure class="figura">
+          <img data-resultado="desconhecidos" alt="Histograma da confiança da rede para integrantes e para rostos de fora do grupo, com o limiar escolhido">
+          <figcaption>Confiança da rede nas fotos de teste: integrantes (verde) e rostos de fora do grupo (vermelho). À
+            esquerda da linha tracejada, a caixa mostra “desconhecido”.</figcaption>
+        </figure>
+        <p><strong>Atenção ao ler o resultado:</strong> os rostos de fora do teste são fotos públicas, parecidas com as do
+          treino. Um estranho na frente da webcam, no mesmo cômodo das fotos de vocês, é um caso mais difícil. O teste
+          mais honesto é o que fizemos à parte: treinar sem um integrante e ver se a rede o rejeita. Se ao vivo um
+          estranho ainda for aceito, subam o limiar no controle deslizante; se um integrante virar “desconhecido”, desçam.</p>
       </article>
 
       <!-- 11. Reconhecimento ao vivo -->
@@ -1136,8 +1254,10 @@
           </li>
           <li><span class="lado navegador">Navegador</span> <strong>Faz a média e desenha.</strong> De um quadro para o outro,
             as probabilidades oscilam um pouco; para o nome não ficar “piscando”, a página usa a <strong>média dos últimos 5
-            quadros</strong> de cada caixa. Se a classe vencedora for “ninguém”, o oval fica cinza com “ninguém”. Se a maior
-            probabilidade média ficar abaixo do limiar (60% por padrão), o oval fica vermelho com “desconhecido”.
+            quadros</strong> de cada caixa. Se a maior probabilidade média ficar abaixo do limiar, o oval fica vermelho com
+            “desconhecido”: a rede foi treinada para ficar em dúvida diante de quem não é do grupo (seção 5). O limiar
+            começa no valor escolhido pelo treino (seção 10) e pode ser ajustado no controle deslizante. Se a classe
+            vencedora, acima do limiar, for “ninguém”, o oval fica cinza com “ninguém”.
             <details class="no-codigo">
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="ao_vivo.js#mediaDosUltimos"></pre>
@@ -1151,10 +1271,11 @@
               <summary>Ver no código</summary>
               <pre class="codigo" data-js="ao_vivo.js#desenharCaixas"></pre>
               <ol class="notas">
+                <li data-trecho="usarLimiarDoModelo(resposta.limiar)">Modelo novo: o controle deslizante vai para o limiar escolhido pelo treino.</li>
                 <li data-trecho="const media = mediaDosUltimos(i, caixa.probabilidades)">A média dos últimos 5 quadros desta caixa.</li>
                 <li data-trecho="const melhor = media.indexOf(Math.max(...media))">A classe com a maior probabilidade média.</li>
                 <li data-trecho="const reconhecido = media[melhor] >= limiar.value / 100">Reconhecido só se passar do limiar escolhido no controle deslizante.</li>
-                <li data-trecho='const vazio = resposta.classes[melhor] === "ninguem"'>A rede acha que não há ninguém no oval.</li>
+                <li data-trecho='const vazio = resposta.classes[melhor] === "ninguem"'>A rede tem confiança de que não há ninguém no oval.</li>
                 <li data-trecho="const x = espelhar.checked ? tela.width - caixa.x - caixa.lado : caixa.x">Vídeo espelhado: só a posição x da caixa é espelhada (o texto continua legível).</li>
                 <li data-trecho="ctx.ellipse(">Desenha o oval-guia, do mesmo tamanho da máscara do pré-processamento (verde, vermelho ou cinza).</li>
                 <li data-trecho="ctx.fillText(texto">Escreve o nome e a confiança.</li>
@@ -1335,6 +1456,10 @@
           <dd>Ele transforma as pontuações da última camada em probabilidades que somam 1, uma para cada classe.</dd>
           <dt>Para que serve a classe “ninguém”?</dt>
           <dd>O softmax sempre escolhe uma das classes que conhece. Sem a classe “ninguém”, a rede era obrigada a dizer o nome de alguém até para uma cadeira vazia (com 97% de confiança para uma imagem cinza lisa). Com ela, a rede tem uma resposta certa para “não há pessoa no oval”.</dd>
+          <dt>Como a rede sabe que alguém é desconhecido?</dt>
+          <dd>Ela não tem uma classe “desconhecido”. No treino, mostramos 1500 rostos públicos de pessoas de fora do grupo e cobramos que, para eles, a resposta fique dividida por igual entre as classes. Assim a confiança só fica alta para os integrantes, e tudo o que fica abaixo do limiar (escolhido nas fotos de validação) aparece como “desconhecido”.</dd>
+          <dt>Usar fotos públicas de rostos não é usar um modelo pronto?</dt>
+          <dd>Não. São só dados: fotos que passam pelo nosso pré-processamento e entram no treino da nossa CNN, que continua começando do zero. Nenhum peso pronto é carregado.</dd>
           <dt>O Grad-CAM é um sistema pronto?</dt>
           <dd>Não. É uma função nossa (<code>grad_cam</code>) que só explica a decisão da nossa CNN, sem participar do reconhecimento. Do TensorFlow ela usa apenas o cálculo do gradiente, o mesmo que a rede usa para aprender. A ampliação do mapa para 96×96 (<code>ampliar_bilinear</code>) é NumPy.</dd>
           <dt>Como vocês sabem que a rede olha o rosto, e não o fundo?</dt>
@@ -1356,7 +1481,7 @@
           <dt>Como reconhece várias pessoas ao vivo?</dt>
           <dd>Sem detector de rosto, a rede não sabe onde estão os rostos. Por isso a tela é dividida em faixas fixas, cada uma com o seu oval, e cada pessoa se posiciona em uma. Achar rostos em qualquer lugar exigiria um detector (como os do OpenCV), que o trabalho não permite.</dd>
           <dt>Quais são as limitações?</dt>
-          <dd>O rosto precisa estar dentro do oval. Pessoas de fora do grupo não têm classe própria: para elas usamos o limiar de 60% (“desconhecido”), que nem sempre basta. A classe “ninguém” funciona melhor com fotos reais dos lugares vazios na pasta <code>dataset/ninguem/</code>. E se as fotos de alguém vierem de um só cômodo, o teste usa esse mesmo cômodo, e a nota fica otimista em relação a um lugar novo.</dd>
+          <dd>O rosto precisa estar dentro do oval. Pessoas de fora do grupo não têm classe própria: a rede é treinada para ficar em dúvida diante delas, e abaixo do limiar a caixa mostra “desconhecido”. Isso depende de os rostos de fora do treino serem variados; um estranho muito parecido com um integrante, no mesmo cenário, ainda pode ser aceito. A classe “ninguém” funciona melhor com fotos reais dos lugares vazios na pasta <code>dataset/ninguem/</code>. E se as fotos de alguém vierem de um só cômodo, o teste usa esse mesmo cômodo, e a nota fica otimista em relação a um lugar novo.</dd>
           <dt>Por que a rede roda no servidor e não no navegador?</dt>
           <dd>Para usar exatamente o mesmo código Python do treino (<code>preprocessar</code> e o modelo salvo). Assim, não existe uma segunda versão do pré-processamento que poderia ficar diferente.</dd>
           <dt>Por que um servidor Node e um processo Python?</dt>

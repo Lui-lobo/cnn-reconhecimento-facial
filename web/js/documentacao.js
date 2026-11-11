@@ -177,11 +177,23 @@ function preencherResultados(r) {
   const conj = r.fotos_por_conjunto;
   const linhasDivisao = r.classes.map((nome, i) =>
     [nomes[i], conj.treino[nome], conj.validacao[nome], conj.teste[nome]]);
-  linhasDivisao.push(["<strong>total</strong>", r.totais.treino, r.totais.validacao, r.totais.teste]);
+  const fora = r.rostos_de_fora || { treino: 0, validacao: 0, teste: 0 };   // modelos antigos não têm rostos de fora
+  if (r.rostos_de_fora) linhasDivisao.push(["<em>rostos de fora do grupo</em>", fora.treino, fora.validacao, fora.teste]);
+  linhasDivisao.push(["<strong>total</strong>", r.totais.treino + fora.treino, r.totais.validacao + fora.validacao,
+    r.totais.teste + fora.teste]);
   document.getElementById("tabela-divisao").innerHTML =
     tabela(["Integrante", "Treino", "Validação", "Teste"], linhasDivisao, "total") +
-    `<p class="nota">Com o aumento de dados, o treino passa de ${numero(r.totais.treino)} para ` +
+    `<p class="nota">Com o aumento de dados, o treino passa de ${numero(r.totais.treino + fora.treino)} para ` +
     `${numero(r.totais.treino_com_aumento)} imagens (originais + 3 cópias modificadas).</p>`;
+
+  // Desconhecidos: o limiar escolhido e o que ele faz nas fotos de teste
+  const d = r.desconhecidos;
+  document.getElementById("info-desconhecidos").innerHTML = d ? blocosDeNumeros([
+    [porcento(d.limiar).replace(",0", ""), "limiar escolhido pelo treino"],
+    [porcento(d.membros_aceitos), "fotos de integrantes aceitas"],
+    [porcento(d.fora_rejeitados), `rostos de fora rejeitados (${fora.teste} pessoas nunca vistas)`],
+    [porcento(d.confianca_fora), "confiança típica para um rosto de fora"],
+  ]) : '<p class="sem-imagem">Disponível depois de treinar com os rostos de fora do grupo.</p>';
 
   // Arquitetura: camada a camada, como no model.summary()
   const linhasCamadas = r.camadas.map((c) =>
