@@ -1325,18 +1325,19 @@
         <h3>O que o modelo procura em cada emoção</h3>
         <p>O FER+ não segue regras escritas: ele aprendeu com cerca de 35 mil fotos de rostos (48×48, do dataset FER2013),
           em que <strong>10 pessoas votaram</strong> na emoção de cada foto. Por isso ele devolve probabilidades, e não um
-          “sim ou não”. Quem votou se baseou nos sinais clássicos de cada expressão (estudos de Paul Ekman):</p>
+          “sim ou não”. Quem votou se baseou nos sinais clássicos de cada expressão (estudos de Paul Ekman). A foto de cada linha é um
+          exemplo real das fotos de teste (mais abaixo), que o FER+ classificou com a emoção certa:</p>
         <div class="tabela-rolagem"><table>
-          <thead><tr><th>Emoção</th><th>Sinais típicos no rosto</th></tr></thead>
+          <thead><tr><th>Exemplo</th><th>Emoção</th><th>Sinais típicos no rosto</th></tr></thead>
           <tbody>
-            <tr><td><strong>alegre</strong></td><td>cantos da boca para cima, bochechas sobem, ruguinhas no canto dos olhos; muitas vezes dentes à mostra</td></tr>
-            <tr><td><strong>triste</strong></td><td>cantos da boca para baixo, parte de dentro das sobrancelhas sobe, pálpebras caídas, olhar para baixo</td></tr>
-            <tr><td><strong>bravo(a)</strong></td><td>sobrancelhas abaixadas e juntas (testa franzida), olhar fixo e tenso, lábios apertados ou dentes cerrados</td></tr>
-            <tr><td><strong>com medo</strong></td><td>sobrancelhas sobem <strong>e se juntam</strong>, olhos bem arregalados, boca aberta com os lábios esticados para os lados</td></tr>
-            <tr><td><strong>surpreso(a)</strong></td><td>sobrancelhas sobem arqueadas (sem se juntar), olhos arregalados, boca aberta em “O” relaxado</td></tr>
-            <tr><td><strong>com nojo</strong></td><td>nariz franzido, lábio de cima levantado</td></tr>
-            <tr><td><strong>com desprezo</strong></td><td>só um canto da boca levantado (meio sorriso de lado)</td></tr>
-            <tr><td><strong>neutro(a)</strong></td><td>rosto relaxado, sem nenhum desses sinais</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_alegre.png" alt="Rosto alegre das fotos de teste"></td><td><strong>alegre</strong></td><td>cantos da boca para cima, bochechas sobem, ruguinhas no canto dos olhos; muitas vezes dentes à mostra</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_triste.png" alt="Rosto triste das fotos de teste"></td><td><strong>triste</strong></td><td>cantos da boca para baixo, parte de dentro das sobrancelhas sobe, pálpebras caídas, olhar para baixo</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_bravo.png" alt="Rosto bravo(a) das fotos de teste"></td><td><strong>bravo(a)</strong></td><td>sobrancelhas abaixadas e juntas (testa franzida), olhar fixo e tenso, lábios apertados ou dentes cerrados</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_medo.png" alt="Rosto com medo das fotos de teste"></td><td><strong>com medo</strong></td><td>sobrancelhas sobem <strong>e se juntam</strong>, olhos bem arregalados, boca aberta com os lábios esticados para os lados</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_surpreso.png" alt="Rosto surpreso(a) das fotos de teste"></td><td><strong>surpreso(a)</strong></td><td>sobrancelhas sobem arqueadas (sem se juntar), olhos arregalados, boca aberta em “O” relaxado</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_nojo.png" alt="Rosto com nojo das fotos de teste"></td><td><strong>com nojo</strong></td><td>nariz franzido, lábio de cima levantado</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_desprezo.png" alt="Rosto com desprezo das fotos de teste"></td><td><strong>com desprezo</strong></td><td>só um canto da boca levantado (meio sorriso de lado)</td></tr>
+            <tr><td><img class="exemplo-emocao" src="img/emocao/exemplo_neutro.png" alt="Rosto neutro(a) das fotos de teste"></td><td><strong>neutro(a)</strong></td><td>rosto relaxado, sem nenhum desses sinais</td></tr>
           </tbody>
         </table></div>
         <p>As confusões mais comuns são <strong>medo × surpresa</strong> (diferem quase só nas sobrancelhas juntas e na boca
@@ -1414,6 +1415,45 @@
         <p>No botão “Ver o que a rede vê”, o painel mostra também a <strong>imagem que o FER+ recebe</strong> (com borda
           roxa) e as barras das 8 emoções, separadas das barras dos integrantes. Se a emoção não estiver saindo, confiram
           nessa imagem se o rosto aparece inteiro, da testa ao queixo, e bem iluminado.</p>
+
+        <h3>Como o FER+ se sai em cada emoção</h3>
+        <p>Na webcam só conseguimos encenar bem alegre, neutro, surpreso e com medo. Para mostrar o FER+ respondendo às
+          <strong>8 emoções</strong>, testamos o modelo em <strong>160 fotos públicas já rotuladas</strong>, 20 de cada
+          emoção (pasta <code>emocoes_de_teste/</code>). Elas foram sorteadas do conjunto de <strong>teste</strong> do
+          FER2013/FER+, que o FER+ não viu no treino, e o sorteio não olhou a resposta do modelo: há fotos que ele acerta
+          e fotos que ele erra. Como essas fotos já vêm recortadas no rosto, não passam pelo nosso recorte: são só
+          ampliadas de 48×48 para 64×64. Para repetir o teste: <code>python -m src.teste_emocao</code>.</p>
+        <figure class="figura">
+          <img src="img/emocao/exemplos.png" alt="Três fotos de cada emoção com a resposta do FER+ em cima de cada uma" style="max-width: 100%;">
+          <figcaption>Para cada emoção (em negrito), as 3 fotos em que o FER+ deu a maior probabilidade para a emoção
+            certa. Título verde = acertou; vermelho = respondeu outra emoção.</figcaption>
+        </figure>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Emoção</th><th>Fotos</th><th>Acertos</th><th>Recall</th><th>Precisão</th><th>Erro mais comum</th></tr></thead>
+          <tbody>
+            <tr><td><strong>neutro(a)</strong></td><td>20</td><td>18</td><td>90%</td><td>34%</td><td>alegre (1)</td></tr>
+            <tr><td><strong>alegre</strong></td><td>20</td><td>19</td><td>95%</td><td>73%</td><td>surpreso(a) (1)</td></tr>
+            <tr><td><strong>surpreso(a)</strong></td><td>20</td><td>16</td><td>80%</td><td>53%</td><td>neutro(a) (2)</td></tr>
+            <tr><td><strong>triste</strong></td><td>20</td><td>9</td><td>45%</td><td>56%</td><td>neutro(a) (9)</td></tr>
+            <tr><td><strong>bravo(a)</strong></td><td>20</td><td>10</td><td>50%</td><td>50%</td><td>neutro(a) (6)</td></tr>
+            <tr><td><strong>com nojo</strong></td><td>20</td><td>6</td><td>30%</td><td>86%</td><td>bravo(a) (6)</td></tr>
+            <tr><td><strong>com medo</strong></td><td>20</td><td>6</td><td>30%</td><td>86%</td><td>surpreso(a) (10)</td></tr>
+            <tr><td><strong>com desprezo</strong></td><td>20</td><td>1</td><td>5%</td><td>100%</td><td>neutro(a) (15)</td></tr>
+          </tbody>
+        </table></div>
+        <figure class="figura">
+          <img src="img/emocao/matriz.png" alt="Matriz de confusão do FER+ nas 160 fotos de teste" class="estreita">
+          <figcaption>Matriz de confusão: linhas = emoção real (votos de 10 pessoas), colunas = resposta do FER+.</figcaption>
+        </figure>
+        <p>O FER+ acerta <strong>85 das 160 fotos (53%)</strong>. Ele reconhece todas as emoções em pelo menos uma foto,
+          mas não por igual: é forte em neutro, alegre e surpreso (80–95%), mediano em triste e bravo (cerca de metade) e
+          fraco em nojo, medo e desprezo, exatamente as emoções com poucas fotos no treino dele. Os erros seguem as
+          confusões esperadas: medo vira surpresa, nojo vira raiva, e triste, bravo e desprezo viram neutro. Por isso a
+          precisão do “neutro” é baixa: em cerca de dois terços das vezes em que ele responde neutro, a foto era de outra
+          emoção.</p>
+        <p>O teste é <strong>equilibrado</strong> de propósito (20 fotos de cada emoção), para cobrar todas igualmente.
+          No conjunto de teste na proporção original, em que neutro e alegre são a maioria, o mesmo modelo acerta cerca
+          de 82% (3352 fotos, medido uma vez com este mesmo código; essas fotos não estão no repositório).</p>
       </article>
 
       <!-- 13. Perguntas prováveis -->
@@ -1500,6 +1540,12 @@
           <dd>Porque ele foi treinado com rostos sem esse tratamento. A máscara existe para a NOSSA rede não decorar o cenário; o FER+ já está treinado, então damos a ele a entrada no formato em que aprendeu.</dd>
           <dt>Por que mostrar a emoção de um “desconhecido”?</dt>
           <dd>A emoção não depende de saber quem a pessoa é: qualquer rosto no oval tem uma expressão. Só quando a CNN diz “ninguém” a emoção é escondida.</dd>
+          <dt>O FER+ reconhece todas as emoções igualmente bem?</dt>
+          <dd>Não. Em 160 fotos públicas rotuladas (20 de cada emoção, que ele não viu no treino), acertou 85 (53%): 80–95% em neutro, alegre e surpreso, cerca de metade em triste e bravo, 30% em nojo e medo e 1 de 20 em desprezo. Na dúvida ele responde neutro, e medo costuma virar surpresa (seção 12).</dd>
+          <dt>Se o FER+ acerta só 53% nesse teste, por que usar ele?</dt>
+          <dd>Porque o teste é equilibrado de propósito, com o mesmo peso para emoções raras e difíceis. Na proporção original do conjunto de teste, o mesmo modelo acerta cerca de 82%. Ele é pequeno, roda em poucos milissegundos por rosto e a arquitetura (estilo VGG) é parecida com a da nossa CNN. As fraquezas vêm dos dados dele: quase não havia fotos de nojo, medo e desprezo no treino.</dd>
+          <dt>Por que testar a emoção com fotos públicas e não com as de vocês?</dt>
+          <dd>Porque precisávamos de fotos com a emoção já rotulada por outras pessoas (10 votos por foto) e não conseguimos encenar bem todas as 8 na webcam. Essas fotos servem só para o teste: não entram no treino da nossa CNN, e o FER+ não é retreinado.</dd>
           <dt>O código desta página pode estar desatualizado?</dt>
           <dd>Não: os blocos de código são lidos do próprio arquivo Python pela rota <code>/api/codigo</code> (o servidor recorta a função direto do arquivo <code>.py</code> ou <code>.js</code>), e as métricas vêm do <code>resultados.json</code> gerado no último treino.</dd>
         </dl>

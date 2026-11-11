@@ -30,6 +30,7 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 ├── package.json            dependência do Node (express)
 ├── dataset/<nome>/         fotos de cada integrante (o nome da pasta é o rótulo)
 ├── rostos_de_fora/         1500 fotos públicas de pessoas de fora do grupo (ensinam a rede a reconhecer um desconhecido)
+├── emocoes_de_teste/       160 fotos públicas com a emoção rotulada (20 por emoção), para testar o modelo pronto de emoções
 ├── modelo/                 gerado pelo treino: modelo_cnn.keras, classes.json, limiar.json, resultados.json
 ├── src/
 │   ├── config.py           todos os parâmetros (IMG_SIZE, EPOCAS, BATCH, SEED, LIMIAR...)
@@ -45,9 +46,10 @@ navegador (webcam, desenho)  --HTTP-->  servidor.js (Node + Express)  --stdin/st
 │   ├── reconhecimento.py   regioes_da_tela, reconhecer_quadro, grad_cam, ampliar_bilinear
 │   ├── robustez.py         teste de troca de fundo (a rede segue o rosto ou o cenário?)
 │   ├── emocao.py           emoção do rosto com o modelo pronto FER+ (ONNX): baixar, preparar a entrada, classificar
+│   ├── teste_emocao.py     testa o FER+ nas fotos de emocoes_de_teste/ (tabela, exemplos e matriz de confusão)
 │   ├── servico.py          processo Python aberto pelo servidor.js: recebe pedidos e roda a CNN
 │   └── treinar.py          executa o pipeline completo
-├── web/                    site: index.html, css/, js/, img/resultados/ (PNGs gerados pelo treino)
+├── web/                    site: index.html, css/, js/, img/resultados/ (PNGs gerados pelo treino), img/emocao/ (figuras do teste do FER+)
 ├── tests/                  testes com pytest
 └── notebooks/              notebook original
 ```
@@ -230,6 +232,46 @@ desprezo), então na dúvida ele tende a responder neutro ou alegre. Medo × sur
 mais comuns, e expressões sutis costumam sair “neutro”: para testar, exagerem a expressão, segurem por 2 segundos e
 mantenham o rosto centralizado no oval, com luz de frente.
 
+#### Teste com cada emoção
+
+Na webcam só conseguimos encenar bem alegre, neutro, surpreso e com medo. Para documentar o FER+ respondendo às
+**8 emoções**, a pasta `emocoes_de_teste/` tem 160 fotos públicas já rotuladas, 20 de cada emoção, sorteadas do
+conjunto de **teste** do FER2013/FER+ (fotos que o FER+ não viu no treino; o sorteio não olhou a resposta do modelo —
+detalhes em [`emocoes_de_teste/LEIAME.md`](emocoes_de_teste/LEIAME.md)). Como essas fotos já vêm recortadas no rosto,
+elas não passam pelo nosso recorte: são só ampliadas de 48×48 para 64×64.
+
+```bash
+python -m src.teste_emocao
+```
+
+Para cada emoção, as 3 fotos em que o FER+ deu a maior probabilidade para a emoção certa (título verde = acertou,
+vermelho = respondeu outra emoção):
+
+![Exemplos de cada emoção e a resposta do FER+](web/img/emocao/exemplos.png)
+
+| Emoção | Fotos | Acertos | Recall | Precisão | Erro mais comum |
+|---|---|---|---|---|---|
+| neutro(a) | 20 | 18 | 90% | 34% | alegre (1) |
+| alegre | 20 | 19 | 95% | 73% | surpreso(a) (1) |
+| surpreso(a) | 20 | 16 | 80% | 53% | neutro(a) (2) |
+| triste | 20 | 9 | 45% | 56% | neutro(a) (9) |
+| bravo(a) | 20 | 10 | 50% | 50% | neutro(a) (6) |
+| com nojo | 20 | 6 | 30% | 86% | bravo(a) (6) |
+| com medo | 20 | 6 | 30% | 86% | surpreso(a) (10) |
+| com desprezo | 20 | 1 | 5% | 100% | neutro(a) (15) |
+
+![Matriz de confusão do FER+ nas fotos de teste](web/img/emocao/matriz.png)
+
+O FER+ acerta **85 das 160 fotos (53%)**. Ele reconhece todas as emoções em pelo menos uma foto, mas não por igual:
+é forte em neutro, alegre e surpreso (80–95%), mediano em triste e bravo (cerca de metade) e fraco em nojo, medo e
+desprezo, exatamente as emoções com poucas fotos no treino dele. Os erros seguem as confusões esperadas: medo vira
+surpresa, nojo vira raiva, e triste, bravo e desprezo viram neutro. A precisão baixa do “neutro” vem daí: em cerca de
+dois terços das vezes em que ele responde neutro, a foto era de outra emoção.
+
+Esse teste é **equilibrado** de propósito (20 fotos de cada emoção), para cobrar todas igualmente. No conjunto de
+teste na proporção original, em que neutro e alegre são a maioria, o mesmo modelo acerta cerca de 82% (3352 fotos,
+medido uma vez com este mesmo código; essas fotos não estão no repositório).
+
 Se o modelo ainda não foi treinado, o site avisa para rodar `python -m src.treinar` primeiro.
 
 ### 6. Testes
@@ -249,7 +291,7 @@ Não usamos bibliotecas auxiliares para o modelo nem para os tratamentos: nada d
 (OpenCV, dlib, face_recognition, MediaPipe), modelo pré-treinado, transfer learning, `ImageDataGenerator`,
 camadas de aumento de dados do Keras ou scikit-learn. A única exceção, permitida pelo trabalho, é a **emoção**,
 que vem do modelo pronto FER+. As fotos públicas de `rostos_de_fora/` são apenas dados de treino: nenhum peso pronto
-é carregado na nossa CNN.
+é carregado na nossa CNN. As de `emocoes_de_teste/` servem só para testar o FER+ e não entram em nenhum treino.
 
 | Etapa | Ferramenta |
 |---|---|

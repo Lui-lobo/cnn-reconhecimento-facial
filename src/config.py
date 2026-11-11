@@ -40,6 +40,8 @@ LIMIARES_POSSIVEIS = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]   #
 CAMINHO_EMOCAO = os.path.join(MODELO_DIR, "emocao_ferplus.onnx")     # baixado sozinho no primeiro uso (~35 MB)
 URL_EMOCAO     = ("https://github.com/onnx/models/raw/main/validated/vision/body_analysis/"
                   "emotion_ferplus/model/emotion-ferplus-8.onnx")
+EMOCOES_TESTE_DIR = os.path.join(RAIZ, "emocoes_de_teste")           # fotos públicas rotuladas para testar o FER+
+IMAGENS_EMOCAO_DIR = os.path.join(RAIZ, "web", "img", "emocao")     # figuras desse teste (ficam no repositório)
 TAMANHO_EMOCAO = 64       # o FER+ recebe um rosto 64 x 64 em tons de cinza
 FRACAO_EMOCAO  = 0.45     # quadrado mais fechado que o da CNN (0.6), no mesmo centro: o FER+ foi treinado com
                           # rostos recortados da testa ao queixo. Só vale para a emoção; a CNN continua com FRACAO_ROSTO

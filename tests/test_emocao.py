@@ -32,6 +32,18 @@ def test_recorte_da_emocao_fica_dentro_do_da_cnn_e_nao_muda_a_cnn():
     assert np.array_equal(preprocessar(img), preprocessar(img, fracao=FRACAO_ROSTO))
 
 
+def test_fotos_de_teste_das_emocoes():
+    # emocoes_de_teste/: 20 fotos 48 x 48 de cada uma das 8 emoções, na ordem do FER+, e a entrada no formato dele
+    from src.teste_emocao import PASTAS, carregar_fotos, entrada_do_teste
+    fotos, rotulos = carregar_fotos()
+    assert len(PASTAS) == len(EMOCOES)
+    assert np.array_equal(np.bincount(rotulos), [20] * 8)
+    assert all(f.shape == (48, 48) for f in fotos)
+    entrada = entrada_do_teste(fotos[0])
+    assert entrada.shape == (1, 1, TAMANHO_EMOCAO, TAMANHO_EMOCAO) and entrada.dtype == np.float32
+    assert 0 <= entrada.min() and entrada.max() <= 255
+
+
 def test_softmax_soma_1_e_mantem_a_ordem():
     pontuacoes = np.array([[2.0, 1.0, 0.1, -3.0, 0.0, 0.5, 1.5, -1.0], [1000.0] * 8])   # o 2º testa números grandes
     probs = softmax(pontuacoes)

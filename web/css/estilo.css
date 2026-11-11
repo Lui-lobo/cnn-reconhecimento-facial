@@ -326,3 +326,6 @@ ol.notas li:hover, ol.notas li.ativa { background: color-mix(in srgb, var(--dest
 }
 .lado.python { background: color-mix(in srgb, #b8860b 22%, var(--superficie)); color: #9a6b00; }
 @media (prefers-color-scheme: dark) { .lado.python { color: #e3b341; } }
+
+/* ---------- Seção 12: miniatura de exemplo de cada emoção ---------- */
+.exemplo-emocao { display: block; width: 72px; height: 72px; border-radius: 6px; border: 1px solid var(--borda); }
