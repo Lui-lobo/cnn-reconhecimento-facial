@@ -126,7 +126,7 @@ O script faz, na ordem: leitura (fotos dos integrantes e rostos de fora do grupo
 rosto e máscara oval) → divisão em treino/validação/teste (por blocos de fotos seguidas) + exemplos de “ninguém” →
 aumento de dados → montagem da CNN → treino (até 60 épocas, com EarlyStopping) → avaliação no teste, teste de troca de
 fundo e escolha do limiar de “desconhecido” → imagens intermediárias. Com os 1500 rostos de fora, o treino sem GPU
-leva em torno de 10 minutos. No fim, imprime as métricas no terminal e salva:
+leva em torno de 15 minutos. No fim, imprime as métricas no terminal e salva:
 
 | Arquivo | Conteúdo |
 |---|---|
